@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { bakeArt, bakeCombatArt } from '../game/art';
+import { bakeArt, bakeCombatArt, bakeDamageArt } from '../game/art';
 
 /**
  * First scene. Bakes all vector art into textures once, so gameplay scenes
@@ -13,6 +13,7 @@ export class BootScene extends Phaser.Scene {
   create(): void {
     bakeArt(this);
     bakeCombatArt(this);
+    bakeDamageArt(this);
     this.scene.start('Map');
     this.scene.launch('Hud');
   }

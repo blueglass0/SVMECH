@@ -4,8 +4,8 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 
 ## Current milestone
 
-**Milestone 3 — Combat core: built, awaiting the user's playtest and sign-off.** M1 and M2 signed off.
-Do not start milestone 4 (Locational damage) until the user signs off M3.
+**Milestone 4 — Locational damage: built, awaiting the user's playtest and sign-off.** M1–M3 signed off.
+Do not start milestone 5 (Economy loop) until the user signs off M4.
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
 
 ## Decisions made after the plan
@@ -59,7 +59,8 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   milestone starts only after sign-off. Leave room for later systems but don't build them early.
 - **Dev tools.** Debug overlay (fps, worst frame, renderer, resolution, map seed; later hit arcs)
   shows in dev or with `?debug` in the URL. The Tune panel (debug only) has movement sliders and
-  dev buttons: win mission, spawn tank, invulnerable, refill, new map. Add money etc. with M5.
+  dev buttons: win mission, spawn tank, invulnerable, repair + refill, hit a section, new map.
+  Add money etc. with M5.
   `?seed=N` replays a specific map; the end screen shows each map's seed.
 - **Update this file** when a milestone changes state.
 
@@ -97,8 +98,15 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
 - Planned additions (see `docs/PLAN.md`): fog of war + sensors with M6, destructible terrain
   as M6b, continuous-beam lasers with M8.
 - Enemies alert neighbours within 650 units when shot. Tanks path with A* (repath ~1.5 s).
-- Player armor is a single pool in M3; M4 splits it per section (`Unit.takeDamage` already
-  receives the shot origin for hit-angle detection).
+- Locational damage (M4): `SectionDamage` (pure logic, reusable for enemy mechs in M8) with
+  rules in `src/data/damage.ts`. Shot origin relative to torso facing picks the section: front
+  ±50° torso, sides that arm, rear ±40° torso ×1.5. Legs take 15% of every hit. Damage beyond
+  an arm's armor (or to a missing arm) goes to the torso; torso at 0 = mech destroyed.
+  Destroyed arm: its weapons stop, arm sprite becomes a stump. Leg damage below 60% slows
+  speed/turning, down to 35%/55% when destroyed. Sections under 40% smoke.
+- HUD: silhouette (per-section condition colours, flashes white when hit) and red hit-direction
+  arcs around the mech for every hit (helps with shots from off-screen; fog of war will need it).
+  Debug mode draws the hit arcs around the mech.
 
 ## Conventions
 
