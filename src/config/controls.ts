@@ -17,6 +17,10 @@ export const CONTROLS = {
   /** Weapon group swap button: offset from the right stick centre, and radius. */
   swapOffset: { x: -98, y: -62 },
   buttonRadius: 40,
+  /** Equipment action buttons (smaller), above the right stick. */
+  equip1Offset: { x: -26, y: -124 },
+  equip2Offset: { x: 54, y: -114 },
+  equipButtonRadius: 30,
   /** A floating stick's base never spawns closer than this to the screen edge (beyond its radius). */
   stickEdgeMargin: 26,
 } as const;

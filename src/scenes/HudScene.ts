@@ -59,6 +59,9 @@ export class HudScene extends Phaser.Scene {
   private threatArrows: Img[] = [];
   private stickImages: { base: Img; knob: Img; view: StickView }[] = [];
   private fire2!: { img: Img; label: Txt };
+  private equipButtons: { img: Img; label: Txt }[] = [];
+  private equipText!: Txt;
+  private layoutEquipCount = -1;
   private shown: Record<string, string> = {};
   private textTimer = 0;
   private debugTimer = 0;
@@ -131,6 +134,11 @@ export class HudScene extends Phaser.Scene {
       const knob = this.add.image(0, 0, 'stick-knob').setScale(1 / HUD_ART_SCALE);
       this.stickImages.push({ base, knob, view });
     }
+    this.equipButtons = [0, 1].map(() => ({
+      img: this.add.image(0, 0, 'button').setScale((CONTROLS.equipButtonRadius / 40) / HUD_ART_SCALE),
+      label: this.addText(0, 0, '', { fontFamily: FONT, fontSize: '10px', fontStyle: 'bold', color: '#d6dde3', align: 'center' }).setOrigin(0.5),
+    }));
+    this.equipText = this.addText(0, 0, '', { fontFamily: FONT, fontSize: '11px', fontStyle: 'bold', color: '#7fe6ff' });
     this.fire2 = {
       img: this.add.image(0, 0, 'button').setScale((CONTROLS.buttonRadius / 40) / HUD_ART_SCALE),
       label: this.addText(0, 0, '2', { fontFamily: FONT, fontSize: '16px', fontStyle: 'bold', color: '#d6dde3' }).setOrigin(0.5),
@@ -171,6 +179,15 @@ export class HudScene extends Phaser.Scene {
     this.fire2.img.setVisible(touch).setPosition(b.x, b.y).setAlpha(b.pressed ? 1 : 0.6);
     this.fire2.label.setVisible(touch).setPosition(b.x, b.y);
     this.setTextIfChanged(this.fire2.label, 'swap', `⇄${actions.stickGroup}`);
+    [touchButtons.equip1, touchButtons.equip2].forEach((eb, i) => {
+      const st = hud.equipment[i];
+      const show = touch && eb.visible && !!st;
+      const ui = this.equipButtons[i];
+      ui.img.setVisible(show).setPosition(eb.x, eb.y).setAlpha(eb.pressed || st?.active ? 1 : st?.ready ? 0.65 : 0.3);
+      ui.label.setVisible(show).setPosition(eb.x, eb.y);
+      if (st) this.setTextIfChanged(ui.label, 'eqb' + i, st.label.replace(' ', '\n'));
+    });
+    if (hud.equipment.length !== this.layoutEquipCount) this.layout();
     // On phones, light up the group the right stick fires.
     for (let i = 0; i < this.groupTexts.length; i++) {
       const active = !touch || actions.stickGroup === i + 1;
@@ -215,6 +232,7 @@ export class HudScene extends Phaser.Scene {
     const blink = Math.floor(performance.now() / 250) % 2 === 0;
     let warn = '';
     if (hud.shutdown > 0) warn = `SHUTDOWN  ${hud.shutdown.toFixed(1)}`;
+    else if (hud.missileWarning) warn = blink ? 'MISSILE INCOMING' : '';
     else if (heatFrac >= hud.heatWarnAt) warn = blink ? 'HEAT CRITICAL' : '';
     this.setTextIfChanged(this.warning, 'warn', warn);
 
@@ -227,6 +245,8 @@ export class HudScene extends Phaser.Scene {
     if (this.textTimer <= 0) {
       this.textTimer = 100;
       this.setTextIfChanged(this.objective, 'obj', `${hud.objectiveLabel.toUpperCase()}  ${hud.objectiveDone} / ${hud.objectiveTotal}`);
+      const keys = touch ? ['', ''] : ['Q ', 'E '];
+      this.setTextIfChanged(this.equipText, 'eqt', hud.equipment.map((e, i) => `${keys[i]}${e.label}${e.active ? ' ●' : ''}`).join('     '));
       const mark = hud.bonusState === 'done' ? '  ✓' : hud.bonusState === 'failed' ? '  ✗' : '';
       if (this.setTextIfChanged(this.bonus, 'bonus', hud.bonusLabel ? `Bonus: ${hud.bonusLabel}${mark}` : '')) {
         this.bonus.setColor(hud.bonusState === 'done' ? '#8fd16a' : hud.bonusState === 'failed' ? '#ff6a5a' : '#8b98a3');
@@ -234,7 +254,11 @@ export class HudScene extends Phaser.Scene {
       this.setTextIfChanged(this.briefing, 'brief', hud.briefing);
       this.briefing.setVisible(hud.briefing !== '');
       hud.groups.forEach((g, i) =>
-        this.setTextIfChanged(this.groupTexts[i], 'g' + i, `${i + 1}  ${g.label}${g.usesAmmo ? `  ·  ${Math.floor(hud.ammo)}` : ''}`),
+        this.setTextIfChanged(
+          this.groupTexts[i],
+          'g' + i,
+          `${i + 1}  ${g.label}${g.usesAmmo ? `  ·  ${Math.floor(hud.ammo)}` : ''}${g.usesMissiles ? `  ·  ${hud.ammoMissile} msl` : ''}`,
+        ),
       );
       const scheme = settings.scheme[actions.device];
       const key = actions.device + scheme;
@@ -326,7 +350,9 @@ export class HudScene extends Phaser.Scene {
     this.debugText?.setPosition(w - MARGIN, 52);
 
     // Status panel: bottom centre (between the thumbs on phones).
-    const panelH = 66;
+    // Equipment line (PC keys) only when equipment with actions is fitted.
+    this.layoutEquipCount = hud.equipment.length;
+    const panelH = 66 + (hud.equipment.length > 0 ? 16 : 0);
     this.layoutDevice = actions.device;
     const px = Math.round(w / 2 - PANEL_W / 2);
     const py = Math.round(h - panelH - (actions.device === 'touch' ? 6 : 26));
@@ -343,6 +369,7 @@ export class HudScene extends Phaser.Scene {
     this.heatWarnTick.setPosition(barX + BAR_W * hud.heatWarnAt, py + 7).setDisplaySize(2, 12);
     for (let g = 0; g < 2; g++) {
       const gy = py + 22 + g * 22;
+      this.equipText.setPosition(x0, py + 66);
       this.groupTexts[g].setPosition(x0, gy);
       this.groupBars[g].bg.setPosition(x0, gy + 15).setDisplaySize(GROUP_BAR_W, 3);
       this.groupBars[g].fill.setPosition(x0, gy + 15);

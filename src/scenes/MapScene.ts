@@ -4,7 +4,7 @@ import { CAMERA } from '../config/controls';
 import { CHASSIS, STARTER_CHASSIS, type ChassisMovement } from '../data/chassis';
 import { DESTROY_TARGETS, MISSION_THEME } from '../data/missions';
 import { Viewport } from '../core/viewport';
-import { InputSystem, actions } from '../core/input';
+import { InputSystem, actions, touchButtons } from '../core/input';
 import { settings } from '../core/settings';
 import { CollisionWorld, type Circle, type Obstacle } from '../core/collision';
 import { DEG, clamp, smoothing, wrapAngle, type Vec } from '../core/math';
@@ -74,6 +74,8 @@ export class MapScene extends Phaser.Scene {
   private smokeTimer = 0;
   private tmp: Vec = { x: 0, y: 0 };
   private warnTimer = 0;
+  private lockTarget: Enemy | null = null;
+  private lockImg!: Phaser.GameObjects.Image;
 
   constructor() {
     super('Map');
@@ -113,6 +115,11 @@ export class MapScene extends Phaser.Scene {
     this.combat.onUnitHit = (u, team, dmg) => this.onUnitHit(u, team, dmg);
     this.ai = { player: this.player, world: this.world, nav, combat: this.combat, fx: this.fx, bodies: this.bodies, difficulty };
     this.controls = new InputSystem(this);
+    // Phone equipment buttons only appear for fitted, activated equipment.
+    touchButtons.equip1.visible = this.player.loadout.actions.length >= 1;
+    touchButtons.equip2.visible = this.player.loadout.actions.length >= 2;
+    this.lockImg = this.add.image(0, 0, 'lock').setScale(1 / ART_SCALE).setDepth(12).setVisible(false);
+    this.lockTarget = null;
 
     const cam = this.cameras.main;
     cam.setBackgroundColor(DISPLAY.background);
@@ -134,7 +141,7 @@ export class MapScene extends Phaser.Scene {
     hud.bonusLabel = cfg.contract.bonus.label;
     hud.bonusState = 'open';
     hud.heatMax = this.player.chassis.heatCapacity;
-    hud.ammoMax = this.player.chassis.ammoCapacity.ballistic;
+    hud.ammoMax = this.player.loadout.ammoCapacity.ballistic;
     hud.lastHit = 0;
     hud.hitMarkers.length = 0;
     this.player.onSectionDestroyed = (s) => this.onSectionDestroyed(s);
@@ -162,7 +169,23 @@ export class MapScene extends Phaser.Scene {
     const scheme = settings.scheme[actions.device];
     const aimTarget = this.resolveAim(cam);
 
-    const stepped = p.update(dt, scheme, actions.move, aimTarget, actions.fire1, actions.fire2, this.world, this.bodies, this.combat);
+    const lock = this.updateLock();
+    const stepped = p.update(
+      dt,
+      {
+        scheme,
+        move: actions.move,
+        aimTarget,
+        fire1: actions.fire1,
+        fire2: actions.fire2,
+        equip1: actions.equip1,
+        equip2: actions.equip2,
+        lock,
+      },
+      this.world,
+      this.bodies,
+      this.combat,
+    );
     if (stepped && this.movement.stepShake > 0 && Math.abs(p.motor.speed) > 20) {
       cam.shake(90, this.movement.stepShake, false);
     }
@@ -189,6 +212,36 @@ export class MapScene extends Phaser.Scene {
         `${scheme} · speed ${p.motor.speed.toFixed(0)}/${this.movement.maxSpeed}` +
         ` · turn ${(p.motor.legTurnVel / DEG).toFixed(0)}°/s · heat ${p.heat.toFixed(0)}`;
     }
+  }
+
+  /**
+   * Seeking missiles lock onto the enemy closest to the torso's aim line
+   * (within 20° and missile range). Shown with a reticle.
+   */
+  private updateLock(): Enemy | null {
+    const p = this.player;
+    const seeker = p.weapons.find((w) => !w.destroyed && w.def.missile && w.def.missile.turnRate > 0);
+    let best: Enemy | null = null;
+    if (seeker && p.alive) {
+      let bestDiff = 20 * DEG;
+      const range = seeker.def.range;
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        const dx = e.x - p.x;
+        const dy = e.y - p.y;
+        if (dx * dx + dy * dy > range * range) continue;
+        const diff = Math.abs(wrapAngle(Math.atan2(dy, dx) - p.motor.torsoAngle));
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          best = e;
+        }
+      }
+    }
+    if (best && best !== this.lockTarget) play('lock', 0.7);
+    this.lockTarget = best;
+    this.lockImg.setVisible(!!best);
+    if (best) this.lockImg.setPosition(best.x, best.y).setRotation(this.elapsed * 1.5);
+    return best;
   }
 
   /** Leave the battlefield: the mission fails but the mech comes home as it is. */
@@ -223,10 +276,10 @@ export class MapScene extends Phaser.Scene {
     for (const s of this.structures) s.takeDamage(1e6, s.x, s.y);
   }
 
-  devSpawnTank(): void {
+  devSpawnTank(type: string = DESTROY_TARGETS.tankType): void {
     const p = this.player;
     const a = p.motor.torsoAngle;
-    const e = createEnemy(this, DESTROY_TARGETS.tankType, p.x + Math.cos(a) * 420, p.y + Math.sin(a) * 420, a + Math.PI);
+    const e = createEnemy(this, type, p.x + Math.cos(a) * 420, p.y + Math.sin(a) * 420, a + Math.PI);
     if (this.world.circleBlocked(e.x, e.y, e.radius)) {
       e.x = p.x + Math.cos(a) * 200;
       e.y = p.y + Math.sin(a) * 200;
@@ -348,12 +401,13 @@ export class MapScene extends Phaser.Scene {
       } else if (done === this.structures.length) {
         this.state = 'won';
       }
-      // Overheat warning beeps.
-      if (p.alive && p.shutdown === 0 && p.heatFraction >= hud.heatWarnAt) {
+      // Warning beeps: overheating, or missiles homing in.
+      const hot = p.alive && p.shutdown === 0 && p.heatFraction >= hud.heatWarnAt;
+      if (hot || hud.missileWarning) {
         this.warnTimer -= dt;
         if (this.warnTimer <= 0) {
           play('warn', 0.8);
-          this.warnTimer = 0.5 - p.heatFraction * 0.3;
+          this.warnTimer = hud.missileWarning ? 0.22 : 0.5 - p.heatFraction * 0.3;
         }
       }
       return;
@@ -397,7 +451,8 @@ export class MapScene extends Phaser.Scene {
         label: live.length > 0 ? live.map((w) => w.def.short).join(' + ') : ws.length > 0 ? 'DESTROYED' : '—',
         ready: 1,
         empty: false,
-        usesAmmo: live.some((w) => w.def.ammoPerShot > 0),
+        usesAmmo: live.some((w) => w.def.ammoPerShot > 0 && w.def.family !== 'missile'),
+        usesMissiles: live.some((w) => w.def.ammoPerShot > 0 && w.def.family === 'missile'),
       };
     });
   }
@@ -449,6 +504,19 @@ export class MapScene extends Phaser.Scene {
     hud.heat = p.heat;
     hud.shutdown = p.shutdown;
     hud.ammo = p.ammo.ballistic;
+    hud.ammoMissile = p.ammo.missile;
+    hud.missileWarning = p.alive && this.combat.missiles.incoming(p) > 0;
+    const e = p.equip;
+    const L = p.loadout;
+    hud.equipment = L.actions.map((kind) =>
+      kind === 'flares'
+        ? { label: `FLARES ×${e.flares}`, ready: e.flares > 0 && e.flareCooldown === 0, active: false }
+        : {
+            label: e.shieldUp > 0 ? `SHIELD ${Math.ceil(e.shieldPool)}` : e.shieldCooldown > 0 ? `SHIELD ${Math.ceil(e.shieldCooldown)}s` : 'SHIELD',
+            ready: e.shieldCooldown === 0,
+            active: e.shieldUp > 0,
+          },
+    );
     for (let g = 0; g < 2; g++) {
       const ws = p.weapons.filter((w) => w.group === g + 1 && !w.destroyed);
       const status = hud.groups[g];

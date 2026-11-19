@@ -6,6 +6,8 @@
 export interface Loadout {
   chassis: string;
   weapons: { mount: string; weapon: string; group: 1 | 2 }[];
+  /** Internal equipment ids (exactly one reactor). */
+  equipment: string[];
 }
 
 export const STARTER_LOADOUT: Loadout = {
@@ -15,6 +17,7 @@ export const STARTER_LOADOUT: Loadout = {
     { mount: 'ra-b', weapon: 'machineGun', group: 1 },
     { mount: 'ra-e', weapon: 'laser', group: 2 },
   ],
+  equipment: ['standardReactor', 'heatSink'],
 };
 
 /** Player heat behaviour (shared by all chassis). */

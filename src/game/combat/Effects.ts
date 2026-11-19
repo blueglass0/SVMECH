@@ -62,10 +62,14 @@ export class Effects {
   private rings: Pool;
   private smoke: Pool;
   private scorch: Pool;
+  private trails: Pool;
+  private flares: Pool;
 
   constructor(scene: Phaser.Scene) {
     this.scorch = new Pool(scene, 'scorch', 24, 2);
     this.smoke = new Pool(scene, 'smoke', 24, 8);
+    this.trails = new Pool(scene, 'smoke', 90, 6);
+    this.flares = new Pool(scene, 'flare', 16, 9, true);
     this.sparks = new Pool(scene, 'spark', 64, 9, true);
     this.flashes = new Pool(scene, 'flash', 20, 9, true);
     this.rings = new Pool(scene, 'ring', 10, 9, true);
@@ -109,7 +113,23 @@ export class Effects {
     }
   }
 
+  /** Missile exhaust puff. */
+  trail(x: number, y: number): void {
+    this.trails.spawn(x, y, 0, 0.35, 0.28, 0, 0, 0.3);
+  }
+
+  /** Flares thrown out around the mech. */
+  flareBurst(x: number, y: number): void {
+    for (let i = 0; i < 6; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = 90 + Math.random() * 90;
+      this.flares.spawn(x, y, 0, 1.1 + Math.random() * 0.4, 1, Math.cos(a) * s, Math.sin(a) * s);
+    }
+  }
+
   update(dt: number): void {
+    this.trails.update(dt);
+    this.flares.update(dt);
     this.sparks.update(dt);
     this.flashes.update(dt);
     this.rings.update(dt);

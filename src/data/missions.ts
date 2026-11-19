@@ -24,6 +24,11 @@ export const DESTROY_TARGETS = {
   tanksPerTarget: 1,
   roamingTanks: [3, 4],
   tankType: 'lightTank',
+  /** Tank types picked at random by weight. */
+  tankTypes: [
+    { type: 'lightTank', weight: 3 },
+    { type: 'missileTank', weight: 1 },
+  ],
   /** Keep this clear around the player's drop point. */
   spawnClearance: 380,
   /** Targets are at least this far from the drop point. */

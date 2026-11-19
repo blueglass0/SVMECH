@@ -7,6 +7,8 @@ export type CombatLevel = 'easy' | 'normal' | 'hard';
 export interface MechState {
   chassis: string;
   weapons: Loadout['weapons'];
+  /** Internal equipment ids, including the reactor. */
+  equipment: string[];
   /** Armor left per section. */
   sections: Record<Section, number>;
   ammo: { ballistic: number; missile: number };
@@ -48,7 +50,7 @@ export interface CareerState {
   money: number;
   loan: LoanState | null;
   mech: MechState;
-  /** Weapon ids owned but not installed. */
+  /** Weapon and equipment ids owned but not installed. */
   inventory: string[];
   contracts: Contract[];
   difficulty: { combat: CombatLevel; economy: CombatLevel };

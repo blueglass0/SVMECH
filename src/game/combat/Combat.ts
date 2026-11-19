@@ -7,6 +7,7 @@ import type { WeaponDef } from '../../data/weapons';
 import { ART_SCALE } from '../art';
 import type { Effects } from './Effects';
 import type { Team, Unit } from './types';
+import { MISSILE_RADIUS, Missiles, type Missile } from './Missiles';
 
 interface Shot {
   active: boolean;
@@ -49,12 +50,20 @@ export class Combat {
   /** Called when a shot or beam hits a unit (stats, alerts). */
   onUnitHit?: (unit: Unit, team: Team, damage: number) => void;
 
+  readonly missiles: Missiles;
+
   constructor(
     scene: Phaser.Scene,
     private world: CollisionWorld,
     private units: Unit[],
     private fx: Effects,
   ) {
+    this.missiles = new Missiles(scene, world, units, fx);
+    this.missiles.onHit = (m, unit, x, y) => {
+      if (unit) this.damage(unit, m.damage, x - Math.cos(m.angle) * 30, y - Math.sin(m.angle) * 30, m.team, x, y);
+      if (m.splashRadius > 0) this.burst(x, y, m.splashRadius, m.splashDamage, m.team, unit, false);
+      play('hit', this.volumeAt(x, y));
+    };
     for (let i = 0; i < SHOT_POOL; i++) {
       const img = scene.add.image(0, 0, 'bullet').setVisible(false).setDepth(7).setScale(1 / ART_SCALE);
       this.shots.push({
@@ -88,10 +97,25 @@ export class Combat {
    * Fire one shot of a weapon from (x, y) toward `angle`. `aimDistance` is how far
    * away the target is: shells with splash burst there if they don't hit anything first.
    */
-  fire(x: number, y: number, angle: number, w: WeaponDef, team: Team, damageMult = 1, spreadMult = 1, aimDistance = 0): void {
+  fire(
+    x: number,
+    y: number,
+    angle: number,
+    w: WeaponDef,
+    team: Team,
+    damageMult = 1,
+    spreadMult = 1,
+    aimDistance = 0,
+    target: Unit | null = null,
+  ): void {
     const a = angle + (Math.random() * 2 - 1) * w.spread * spreadMult * DEG;
     const damage = w.damage * damageMult;
     const volume = this.volumeAt(x, y) * (team === 'player' ? 1 : 0.7);
+    if (w.delivery === 'missile') {
+      this.missiles.launch(x, y, angle, w, team, damageMult, spreadMult, target);
+      play('missile', volume);
+      return;
+    }
     if (w.delivery === 'beam') {
       this.fireBeam(x, y, a, w.range, damage, team);
       play('laser', volume);
@@ -135,13 +159,20 @@ export class Combat {
           hitUnit = u;
         }
       }
+      const hitMissile = this.missileOnLine(s.x, s.y, nx, ny, s.team, t);
+      if (hitMissile) {
+        this.fx.impact(hitMissile.x, hitMissile.y, 0, 3);
+        this.missiles.damage(hitMissile, 1);
+        this.kill(s);
+        continue;
+      }
       if (t >= 0) {
         const hx = s.x + (nx - s.x) * t;
         const hy = s.y + (ny - s.y) * t;
         const angle = Math.atan2(s.vy, s.vx);
         this.fx.impact(hx, hy, angle, s.big ? 6 : 2);
         if (hitUnit) this.damage(hitUnit, s.damage, s.x, s.y, s.team, hx, hy);
-        else if (s.splashRadius > 0) this.burst(hx, hy, s, hitUnit);
+        else if (s.splashRadius > 0) this.burst(hx, hy, s.splashRadius, s.splashDamage, s.team, null);
         if (s.big) play('hit', this.volumeAt(hx, hy) * 0.8);
         this.kill(s);
         continue;
@@ -150,12 +181,13 @@ export class Combat {
       s.x = nx;
       s.y = ny;
       if (s.travelled >= s.range) {
-        if (s.splashRadius > 0) this.burst(nx, ny, s, null);
+        if (s.splashRadius > 0) this.burst(nx, ny, s.splashRadius, s.splashDamage, s.team, null);
         this.kill(s);
         continue;
       }
       s.img.setPosition(nx, ny);
     }
+    this.missiles.update(dt);
     for (const b of this.beams) {
       if (b.life <= 0) continue;
       b.life -= dt;
@@ -166,6 +198,7 @@ export class Combat {
 
   /** Remove every live shot and beam (mission restart). */
   clear(): void {
+    this.missiles.clear();
     for (const s of this.shots) this.kill(s);
     for (const b of this.beams) {
       b.life = 0;
@@ -186,21 +219,64 @@ export class Combat {
         hitUnit = u;
       }
     }
+    const m = this.missileOnLine(x, y, ex, ey, team, t);
+    if (m) {
+      // The beam stops at the first missile in its way and burns it.
+      const len = Math.hypot(m.x - x, m.y - y);
+      this.missiles.damage(m, 2);
+      this.showBeam(x, y, a, len, 'beam');
+      return;
+    }
     const len = (t >= 0 ? t : 1) * range;
     const hx = x + Math.cos(a) * len;
     const hy = y + Math.sin(a) * len;
     if (hitUnit) this.damage(hitUnit, damage, x, y, team, hx, hy);
     if (t >= 0) this.fx.impact(hx, hy, a, 5);
+    this.showBeam(x, y, a, len, 'beam');
+    this.fx.muzzle(x, y, a, 0.5);
+  }
+
+  flareEffect(x: number, y: number): void {
+    this.fx.flareBurst(x, y);
+  }
+
+  /** Point defense: a quick tracer at a missile that may destroy it. */
+  pointDefenseShot(x: number, y: number, m: Missile, damage: number, accuracy: number): void {
+    const a = Math.atan2(m.y - y, m.x - x);
+    this.showBeam(x, y, a, Math.hypot(m.x - x, m.y - y), 'pd-tracer');
+    if (Math.random() < accuracy) {
+      this.fx.impact(m.x, m.y, a, 2);
+      this.missiles.damage(m, damage);
+    }
+    play('mg', this.volumeAt(x, y) * 0.5);
+  }
+
+  /** First hostile missile crossing the segment, if it's closer than fraction `t` (or t < 0). */
+  private missileOnLine(x0: number, y0: number, x1: number, y1: number, team: Team, t: number): Missile | null {
+    let best: Missile | null = null;
+    let bestT = t < 0 ? 2 : t;
+    for (const m of this.missiles.list) {
+      if (!m.active || m.team === team) continue;
+      const mt = segmentCircle(x0, y0, x1, y1, m.x, m.y, MISSILE_RADIUS);
+      if (mt >= 0 && mt < bestT) {
+        bestT = mt;
+        best = m;
+      }
+    }
+    return best;
+  }
+
+  private showBeam(x: number, y: number, a: number, len: number, texture: string): void {
     const b = this.beams[this.nextBeam];
     this.nextBeam = (this.nextBeam + 1) % this.beams.length;
     b.life = BEAM_LIFE;
     b.img
+      .setTexture(texture)
       .setPosition(x, y)
       .setRotation(a)
       .setScale(len / (BEAM_TEX_LENGTH * ART_SCALE), 1 / ART_SCALE)
       .setAlpha(1)
       .setVisible(true);
-    this.fx.muzzle(x, y, a, 0.5);
   }
 
   private damage(u: Unit, amount: number, fromX: number, fromY: number, team: Team, hitX: number, hitY: number): void {
@@ -208,18 +284,20 @@ export class Combat {
     this.onUnitHit?.(u, team, amount);
   }
 
-  /** Shell burst on the ground: damage falls off with distance. Mechs take it in the legs. */
-  private burst(x: number, y: number, s: Shot, skip: Unit | null): void {
-    this.fx.explosion(x, y, 0.35);
-    play('hit', this.volumeAt(x, y));
+  /** Ground burst: damage falls off with distance. Mechs take it in the legs. */
+  private burst(x: number, y: number, radius: number, damage: number, team: Team, skip: Unit | null, effect = true): void {
+    if (effect) {
+      this.fx.explosion(x, y, 0.35);
+      play('hit', this.volumeAt(x, y));
+    }
     for (const u of this.units) {
-      if (!u.alive || u.team === s.team || u === skip) continue;
+      if (!u.alive || u.team === team || u === skip) continue;
       const d = Math.hypot(u.x - x, u.y - y) - u.radius;
-      if (d >= s.splashRadius) continue;
-      const amount = s.splashDamage * (1 - Math.max(0, d) / s.splashRadius);
+      if (d >= radius) continue;
+      const amount = damage * (1 - Math.max(0, d) / radius);
       if (u.takeSplash) u.takeSplash(amount);
       else u.takeDamage(amount, x, y);
-      this.onUnitHit?.(u, s.team, amount);
+      this.onUnitHit?.(u, team, amount);
     }
   }
 

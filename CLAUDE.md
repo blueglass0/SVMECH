@@ -4,8 +4,10 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 
 ## Current milestone
 
-**Milestone 5 — Economy loop: built, awaiting the user's playtest and sign-off.** M1–M4 signed off.
-This completes the prototype (M1–M5). Do not start milestone 6 until the user signs off M5.
+**Milestone 6 part 1 — Loadout depth and missiles: built, awaiting the user's playtest.**
+M1–M5 (the prototype) signed off. M6 is split: part 1 = equipment, missiles, countermeasures;
+part 2 (next) = fog of war, line of sight and sensors. Don't start part 2 until the user has
+played part 1.
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
 
 ## Decisions made after the plan
@@ -15,6 +17,8 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   persistent MechWarrior-style throttle setting. Chosen because it maps onto the phone stick.
 - **Phones see slightly less of the map** (640 vs 720 world units on the short side) so the mech
   isn't tiny. PC view size is approved as is.
+- **Tonnage-limited contracts and field ammo/repair stations** were requested after M5; they
+  belong with M7 (multiple chassis, interact action). See `docs/PLAN.md`.
 - **Chassis feel:** heavier chassis get lower turn rates and more momentum (lower accel/decel),
   lights turn and accelerate quicker. The movement numbers in `chassis.ts` are enough to make
   chassis feel distinct (user-approved, M2).
@@ -133,6 +137,25 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   can't afford fuel, selling spares can't cover it, and you already have a loan.
 - Reloading mid-mission counts as a withdrawal (`activeContract` in the save).
 - Bonus objectives: destroy all turrets / all tanks / finish within a time / lose no section.
+
+## Loadout and missile notes (M6 part 1)
+
+- `src/data/equipment.ts`: reactors (exactly one; power output + passive heat), heat sinks,
+  armor plating, ammo bins, shield generator, flares, point defense. Shop items are weapons or
+  equipment, ids unique across both (`src/data/items.ts`).
+- `src/game/mechStats.ts` derives everything from a loadout (tonnage, slots, power, heat,
+  section max armor, ammo capacity, equipment). Career, UI and `PlayerMech` all use it.
+- Save migration: careers saved before M6 get the starter reactor + heat sink on load.
+- Equipment actions: Q / E on PC (`actions.equip1/2`), small buttons above the right stick on
+  phones (only shown when fitted). Order: flares first, then shield (`EQUIPMENT_ACTION_ORDER`).
+- Shield: absorbs up to its capacity for a few seconds, then cools down; adds heat when raised.
+  Flares break most missile locks (85% each) and send them at a decoy. Point defense shoots the
+  nearest hostile missile in range automatically while the mech is running.
+- Missiles (`combat/Missiles.ts`): pooled objects with HP; any shot or beam can destroy them.
+  Seeking missiles lock onto the enemy nearest the torso aim line (≤20°, in range), shown with
+  a reticle; without a lock they fly straight. Rockets are unguided salvos with splash.
+  Enemy missile carriers (`missileTank`) fire seeking missiles; HUD warns "MISSILE INCOMING".
+- Vulture: base 30 t + equipment, 8 slots, torso missile hardpoint, base cooling 6/s.
 
 ## Conventions
 

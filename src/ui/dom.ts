@@ -161,6 +161,7 @@ function tuningPanel(game: Phaser.Game, app: App): HTMLElement {
   const map = () => game.scene.getScene('Map') as MapScene | null;
   button(dev, 'Win mission', () => map()?.devWin());
   button(dev, 'Spawn tank', () => map()?.devSpawnTank());
+  button(dev, 'Spawn missile tank', () => map()?.devSpawnTank('missileTank'));
   const god = button(dev, 'Invulnerable: off', () => {
     const on = map()?.devToggleInvulnerable();
     god.textContent = `Invulnerable: ${on ? 'on' : 'off'}`;

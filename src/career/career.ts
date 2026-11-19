@@ -3,6 +3,9 @@ import { COMBAT_DIFFICULTY } from '../data/difficulty';
 import { CONTRACT_FLAVOR, ECONOMY, ECONOMY_DIFFICULTY, EMPLOYERS, ENEMY_FORCES, SHOP_STOCK } from '../data/economy';
 import { STARTER_LOADOUT } from '../data/loadouts';
 import { WEAPONS } from '../data/weapons';
+import { EQUIPMENT } from '../data/equipment';
+import { itemName, itemPrice, isEquipment } from '../data/items';
+import { mechStats } from '../game/mechStats';
 import { SECTIONS } from '../game/units/SectionDamage';
 import { randomSeed } from '../core/rng';
 import type {
@@ -31,7 +34,11 @@ export function loadCareer(): CareerState | null {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw) as CareerState;
-    return s.version === 1 ? s : null;
+    if (s.version !== 1) return null;
+    // Saves from before equipment existed (M5): give the mech the starter reactor and heat sink.
+    if (!s.mech.equipment) s.mech.equipment = [...STARTER_LOADOUT.equipment];
+    normalizeMech(s);
+    return s;
   } catch {
     return null;
   }
@@ -62,6 +69,7 @@ export function newCareer(combat: CombatLevel, economy: CombatLevel): CareerStat
     mech: {
       chassis: chassis.id,
       weapons: STARTER_LOADOUT.weapons.map((w) => ({ ...w })),
+      equipment: [...STARTER_LOADOUT.equipment],
       sections: { ...chassis.sections },
       ammo: { ...chassis.ammoCapacity },
       destroyed: false,
@@ -98,18 +106,18 @@ export function price(s: CareerState, base: number): number {
   return Math.round(base * econ(s).costs);
 }
 
-export function sellPrice(s: CareerState, weaponId: string): number {
-  return Math.round(price(s, WEAPONS[weaponId].price) * ECONOMY.sellFraction);
+export function sellPrice(s: CareerState, itemId: string): number {
+  return Math.round(price(s, itemPrice(itemId)) * ECONOMY.sellFraction);
 }
 
 // ---------- Mech and loadout ----------
 
 export function tonnage(m: MechState): number {
-  return CHASSIS[m.chassis].baseTonnage + m.weapons.reduce((t, w) => t + WEAPONS[w.weapon].tonnage, 0);
+  return mechStats(m).tonnage;
 }
 
 export function powerDraw(m: MechState): number {
-  return m.weapons.reduce((t, w) => t + WEAPONS[w.weapon].power, 0);
+  return mechStats(m).powerDraw;
 }
 
 export interface LoadoutCheck {
@@ -118,25 +126,39 @@ export interface LoadoutCheck {
 }
 
 export function checkLoadout(m: MechState): LoadoutCheck {
-  const c = CHASSIS[m.chassis];
+  const st = mechStats(m);
   const problems: string[] = [];
-  if (tonnage(m) > c.maxTonnage) problems.push(`Too heavy: ${tonnage(m)} / ${c.maxTonnage} t`);
-  if (powerDraw(m) > c.powerOutput) problems.push(`Not enough power: ${powerDraw(m)} / ${c.powerOutput}`);
+  if (st.reactors.length !== 1) problems.push(st.reactors.length === 0 ? 'No reactor installed' : 'Only one reactor allowed');
+  if (st.tonnage > st.maxTonnage) problems.push(`Too heavy: ${st.tonnage} / ${st.maxTonnage} t`);
+  if (st.powerDraw > st.powerOutput) problems.push(`Not enough power: ${st.powerDraw} / ${st.powerOutput}`);
+  if (st.slotsUsed > st.slots) problems.push(`Too many internal slots used: ${st.slotsUsed} / ${st.slots}`);
   if (m.weapons.length === 0) problems.push('No weapons installed');
   return { ok: problems.length === 0, problems };
 }
 
 export function ammoCapacity(m: MechState): { ballistic: number; missile: number } {
-  return { ...CHASSIS[m.chassis].ammoCapacity };
+  return mechStats(m).ammoCapacity;
 }
 
 export function mechValue(m: MechState): number {
-  return CHASSIS[m.chassis].price + m.weapons.reduce((t, w) => t + WEAPONS[w.weapon].price, 0);
+  return (
+    CHASSIS[m.chassis].price +
+    m.weapons.reduce((t, w) => t + WEAPONS[w.weapon].price, 0) +
+    m.equipment.reduce((t, id) => t + itemPrice(id), 0)
+  );
+}
+
+/** Keep armor and ammo within the current loadout's limits (after removing plating or bins). */
+export function normalizeMech(s: CareerState): void {
+  const st = mechStats(s.mech);
+  for (const sec of SECTIONS) s.mech.sections[sec] = Math.min(s.mech.sections[sec], st.sections[sec]);
+  s.mech.ammo.ballistic = Math.min(s.mech.ammo.ballistic, st.ammoCapacity.ballistic);
+  s.mech.ammo.missile = Math.min(s.mech.ammo.missile ?? 0, st.ammoCapacity.missile);
 }
 
 export function sectionRepairCost(s: CareerState, section: Section): number {
   const m = s.mech;
-  const max = CHASSIS[m.chassis].sections[section];
+  const max = mechStats(m).sections[section];
   const missing = max - m.sections[section];
   if (missing <= 0) return 0;
   const mult = m.sections[section] <= 0 ? ECONOMY.destroyedSectionMultiplier : 1;
@@ -151,7 +173,7 @@ export function repairSection(s: CareerState, section: Section): boolean {
   const cost = sectionRepairCost(s, section);
   if (cost === 0 || cost > s.money || s.mech.destroyed) return false;
   spend(s, cost);
-  s.mech.sections[section] = CHASSIS[s.mech.chassis].sections[section];
+  s.mech.sections[section] = mechStats(s.mech).sections[section];
   return true;
 }
 
@@ -171,26 +193,48 @@ export function rebuild(s: CareerState): boolean {
   if (!s.mech.destroyed || cost > s.money) return false;
   spend(s, cost);
   s.mech.destroyed = false;
-  s.mech.sections = { ...CHASSIS[s.mech.chassis].sections };
+  s.mech.sections = { ...mechStats(s.mech).sections };
   return true;
 }
 
 // ---------- Shop and installing ----------
 
-export function buyWeapon(s: CareerState, weaponId: string): boolean {
-  const cost = price(s, WEAPONS[weaponId].price);
-  if (!SHOP_STOCK.includes(weaponId) || cost > s.money) return false;
+export function buyItem(s: CareerState, id: string): boolean {
+  const cost = price(s, itemPrice(id));
+  if (!SHOP_STOCK.includes(id) || cost > s.money) return false;
   spend(s, cost);
-  s.inventory.push(weaponId);
+  s.inventory.push(id);
   return true;
 }
 
-export function sellWeapon(s: CareerState, inventoryIndex: number): boolean {
+export function sellItem(s: CareerState, inventoryIndex: number): boolean {
   const id = s.inventory[inventoryIndex];
   if (!id) return false;
   s.inventory.splice(inventoryIndex, 1);
   earn(s, sellPrice(s, id));
   return true;
+}
+
+/** Install owned equipment. A new reactor replaces the old one (which goes to inventory). */
+export function installEquipment(s: CareerState, id: string): boolean {
+  const idx = s.inventory.indexOf(id);
+  if (idx < 0 || !isEquipment(id)) return false;
+  if (EQUIPMENT[id].kind === 'reactor') {
+    const old = s.mech.equipment.findIndex((e) => EQUIPMENT[e].kind === 'reactor');
+    if (old >= 0) s.inventory.push(...s.mech.equipment.splice(old, 1));
+  }
+  s.inventory.splice(s.inventory.indexOf(id), 1);
+  s.mech.equipment.push(id);
+  normalizeMech(s);
+  return true;
+}
+
+export function removeEquipment(s: CareerState, index: number): void {
+  const id = s.mech.equipment[index];
+  if (!id) return;
+  s.mech.equipment.splice(index, 1);
+  s.inventory.push(id);
+  normalizeMech(s);
 }
 
 /** Put an owned weapon in a hardpoint (whatever was there goes back to inventory). */
@@ -299,26 +343,32 @@ export function fuelCost(s: CareerState): number {
   return price(s, tonnage(s.mech) * ECONOMY.fuelPerTon);
 }
 
-export function ammoCost(s: CareerState, targetBallistic: number): number {
-  const add = Math.max(0, targetBallistic - s.mech.ammo.ballistic);
-  return price(s, add * ECONOMY.ammoPrice.ballistic);
+export type AmmoTarget = { ballistic: number; missile: number };
+
+/** Price of topping ammo up to `target` (leftover ammo is already paid for). */
+export function ammoCost(s: CareerState, target: AmmoTarget): number {
+  const b = Math.max(0, target.ballistic - s.mech.ammo.ballistic);
+  const m = Math.max(0, target.missile - (s.mech.ammo.missile ?? 0));
+  return price(s, b * ECONOMY.ammoPrice.ballistic + m * ECONOMY.ammoPrice.missile);
 }
 
 /** Why the mech can't deploy right now, or null if it can. */
-export function deployBlocker(s: CareerState, targetBallistic: number): string | null {
+export function deployBlocker(s: CareerState, target: AmmoTarget): string | null {
   if (s.mech.destroyed) return 'Your mech is destroyed. Rebuild it first.';
   if (s.mech.sections.torso <= 0) return 'Torso destroyed. Repair it first.';
   const check = checkLoadout(s.mech);
   if (!check.ok) return check.problems.join('. ');
-  if (fuelCost(s) + ammoCost(s, targetBallistic) > s.money) return 'Not enough money for fuel and ammo.';
+  if (fuelCost(s) + ammoCost(s, target) > s.money) return 'Not enough money for fuel and ammo.';
   return null;
 }
 
-export function deploy(s: CareerState, contractId: number, targetBallistic: number): MissionConfig | null {
+export function deploy(s: CareerState, contractId: number, target: AmmoTarget): MissionConfig | null {
   const contract = s.contracts.find((c) => c.id === contractId);
-  if (!contract || deployBlocker(s, targetBallistic)) return null;
-  spend(s, fuelCost(s) + ammoCost(s, targetBallistic));
-  s.mech.ammo.ballistic = Math.max(s.mech.ammo.ballistic, Math.min(targetBallistic, ammoCapacity(s.mech).ballistic));
+  if (!contract || deployBlocker(s, target)) return null;
+  spend(s, fuelCost(s) + ammoCost(s, target));
+  const cap = ammoCapacity(s.mech);
+  s.mech.ammo.ballistic = Math.max(s.mech.ammo.ballistic, Math.min(target.ballistic, cap.ballistic));
+  s.mech.ammo.missile = Math.max(s.mech.ammo.missile ?? 0, Math.min(target.missile, cap.missile));
   s.activeContract = contract.id;
   const combat = COMBAT_DIFFICULTY[s.difficulty.combat];
   return {
@@ -385,7 +435,7 @@ function autoSell(s: CareerState, needed: number, notes: string[]): void {
   for (const item of order) {
     if (s.money >= needed) break;
     s.money += item.v;
-    sold.push(WEAPONS[item.id].name);
+    sold.push(itemName(item.id));
     s.inventory[item.i] = '';
   }
   s.inventory = s.inventory.filter((x) => x !== '');
@@ -425,7 +475,7 @@ function bankrupt(s: CareerState, reason: string): void {
   s.loan = null;
   s.money = Math.max(s.money, 0);
   s.mech.destroyed = false;
-  s.mech.sections = { ...CHASSIS[s.mech.chassis].sections };
+  s.mech.sections = { ...mechStats(s.mech).sections };
   s.overReason = `Emergency bailout: ${reason} Your debt was cleared and your mech restored.`;
 }
 
