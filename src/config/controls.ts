@@ -4,6 +4,8 @@ export const CONTROLS = {
   stickRadius: 58,
   /** Stick input below this fraction is ignored. */
   stickDeadZone: 0.15,
+  /** Right stick: aim only below this (fraction of full tilt after the dead zone), fire above it. */
+  fireThreshold: 0.75,
   /** Right stick centre: distance from the bottom-right corner. */
   rightStickInset: { x: 135, y: 122 },
   /** A touch this many radii from the right stick centre grabs it. */

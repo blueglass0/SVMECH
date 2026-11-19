@@ -48,6 +48,7 @@ export class HudScene extends Phaser.Scene {
   private panelBg!: Img;
   private silhouette: { img: Img; section: Section; base: string; dx: number; dy: number }[] = [];
   private hitArcs: Img[] = [];
+  private fireRing!: Img;
   private heatBar!: Img;
   private heatWarnTick!: Img;
   private groupBars: { bg: Img; fill: Img }[] = [];
@@ -122,6 +123,7 @@ export class HudScene extends Phaser.Scene {
     for (let i = 0; i < 6; i++) this.targetArrows.push(this.add.image(0, 0, 'edge-target').setScale(1 / HUD_ART_SCALE).setVisible(false));
     for (let i = 0; i < 12; i++) this.threatArrows.push(this.add.image(0, 0, 'edge-threat').setScale(1 / HUD_ART_SCALE).setVisible(false));
 
+    this.fireRing = this.add.image(0, 0, 'stick-ring').setScale(1 / HUD_ART_SCALE);
     for (const view of [sticks.left, sticks.right]) {
       const base = this.add.image(0, 0, 'stick-base').setScale(1 / HUD_ART_SCALE);
       const knob = this.add.image(0, 0, 'stick-knob').setScale(1 / HUD_ART_SCALE);
@@ -162,6 +164,7 @@ export class HudScene extends Phaser.Scene {
       s.base.setVisible(touch).setPosition(s.view.baseX, s.view.baseY).setAlpha(a);
       s.knob.setVisible(touch).setPosition(s.view.knobX, s.view.knobY).setAlpha(a);
     }
+    this.fireRing.setVisible(touch).setPosition(sticks.right.baseX, sticks.right.baseY).setAlpha(actions.fire1 || actions.fire2 ? 1 : 0.6);
     const b = touchButtons.swap;
     this.fire2.img.setVisible(touch).setPosition(b.x, b.y).setAlpha(b.pressed ? 1 : 0.6);
     this.fire2.label.setVisible(touch).setPosition(b.x, b.y);

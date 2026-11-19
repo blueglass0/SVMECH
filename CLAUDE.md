@@ -95,12 +95,17 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   cursor), so the slow torso matters. Laser is hitscan; ballistics are projectiles.
 - Phone aim assist: stick aim bends halfway toward an enemy within 12° and 650 units.
 - Phone weapon groups: right stick fires `actions.stickGroup`; the ⇄ button next to it toggles 1/2.
+  Right stick aims only inside the inner ring (`CONTROLS.fireThreshold`) and fires past it.
 - Planned additions (see `docs/PLAN.md`): fog of war + sensors with M6, destructible terrain
   as M6b, continuous-beam lasers with M8.
 - Enemies alert neighbours within 650 units when shot. Tanks path with A* (repath ~1.5 s).
 - Locational damage (M4): `SectionDamage` (pure logic, reusable for enemy mechs in M8) with
-  rules in `src/data/damage.ts`. Shot origin relative to torso facing picks the section: front
-  ±50° torso, sides that arm, rear ±40° torso ×1.5. Legs take 15% of every hit. Damage beyond
+  rules in `src/data/damage.ts`. The point where a shot strikes the mech's outline, as an angle
+  from the torso facing, picks the section: front ±25° torso, sides (incl. off-centre frontal
+  hits) that arm, rear ±40° torso ×1.5. Legs take 15% of every hit plus splash: enemy cannon
+  shells burst on the ground at their aim point if they miss (`WeaponDef.splash`), and splash
+  hits mechs in the legs. Measured: ~28/25/32/15% torso/arms/legs standing still against
+  frontal fire; legs ~35% when walking (near misses). Damage beyond
   an arm's armor (or to a missing arm) goes to the torso; torso at 0 = mech destroyed.
   Destroyed arm: its weapons stop, arm sprite becomes a stump. Leg damage below 60% slows
   speed/turning, down to 35%/55% when destroyed. Sections under 40% smoke.

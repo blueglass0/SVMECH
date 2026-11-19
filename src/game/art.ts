@@ -121,6 +121,17 @@ export function bakeArt(scene: Phaser.Scene): void {
     },
     3,
   );
+  // Right stick: inner ring marks where aiming turns into firing.
+  bake(
+    scene,
+    'stick-ring',
+    124,
+    124,
+    (g) => {
+      g.lineStyle(1.5, 0xff9a5a, 0.45).strokeCircle(0, 0, 46);
+    },
+    3,
+  );
   bake(
     scene,
     'stick-knob',
@@ -332,10 +343,10 @@ export function bakeDamageArt(scene: Phaser.Scene): void {
     150,
     150,
     (g) => {
-      for (let i = 0; i < 3; i++) {
-        g.lineStyle(7 - i * 2, 0xff4d3d, 0.35 + i * 0.3);
+      for (let i = 0; i < 2; i++) {
+        g.lineStyle(4 - i * 2, 0xff4d3d, 0.45 + i * 0.45);
         g.beginPath();
-        g.arc(0, 0, 64, -0.45, 0.45);
+        g.arc(0, 0, 50, -0.3, 0.3);
         g.strokePath();
       }
     },

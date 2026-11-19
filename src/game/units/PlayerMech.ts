@@ -141,14 +141,26 @@ export class PlayerMech implements Unit {
     return Math.min(1, this.heat / this.chassis.heatCapacity);
   }
 
-  takeDamage(amount: number, fromX: number, fromY: number): void {
+  takeDamage(amount: number, fromX: number, fromY: number, hitX?: number, hitY?: number): void {
     if (!this.alive) return;
     const worldAngle = Math.atan2(fromY - this.y, fromX - this.x);
     this.lastHit = performance.now();
     this.lastHitAngle = worldAngle;
     if (this.invulnerable) return;
     const before = this.sections.total;
-    const hit = this.sections.apply(amount, worldAngle - this.motor.torsoAngle);
+    // The section is picked by where the shot struck the mech's outline: arms are either
+    // side of the torso, so off-centre hits from the front land on an arm.
+    const strike = hitX !== undefined && hitY !== undefined ? Math.atan2(hitY - this.y, hitX - this.x) : worldAngle;
+    const hit = this.sections.apply(amount, strike - this.motor.torsoAngle);
+    this.stats.damageTaken += before - this.sections.total;
+    for (const s of hit.destroyed) this.loseSection(s);
+    this.updateLegs();
+  }
+
+  takeSplash(amount: number): void {
+    if (!this.alive || this.invulnerable) return;
+    const before = this.sections.total;
+    const hit = this.sections.applySplash(amount);
     this.stats.damageTaken += before - this.sections.total;
     for (const s of hit.destroyed) this.loseSection(s);
     this.updateLegs();

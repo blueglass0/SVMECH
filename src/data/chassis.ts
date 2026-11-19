@@ -76,7 +76,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
       strideLength: 46,
       stepShake: 0.0012,
     },
-    sections: { torso: 380, leftArm: 150, rightArm: 150, legs: 200 },
+    sections: { torso: 380, leftArm: 150, rightArm: 150, legs: 180 },
     heatCapacity: 100,
     heatDissipation: 8,
     ammoCapacity: { ballistic: 1350, missile: 0 },
