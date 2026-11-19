@@ -135,8 +135,10 @@ Milestones 1 to 5 are the prototype: a complete, playable loop with one mech, a 
 ### Later, as time allows
 
 6. **Loadout depth and missiles.** Reactors, heat sinks, sensors, extra armor, and the shield generator. Missiles and rockets for both sides, missile HP, flares, and point defense.
+   - **Fog of war and line of sight** (added after M3). The player sees a vision cone in front of the torso plus a small all-round radius; enemies outside it or behind walls are hidden, with last-seen markers. Hit-direction indicators for shots from out of sight. Sensors and radar widen or extend vision, and some chassis come with wider cones. Default rendering is the cheap version (one pre-baked darkness image rotated with the torso); an option keeps buildings and terrain visible but faded outside the cone, if performance allows.
+6b. **Destructible terrain** (added after M3). Buildings and walls take weapon damage, show damage stages and collapse into walkable rubble; small objects (fences, trees, sheds, barriers) are crushed by walking through them, with mech weight deciding what can be crushed. Whole objects break, not pieces.
 7. **Hangar and backups.** Three or four buyable chassis, backup mechs with drop-in, and swap stations.
-8. **Enemies and weapons.** Drones, enemy mechs that use the player's systems, and the rest of the weapons: Gatling gun, heavy cannon, more lasers, plasma, and lightning.
+8. **Enemies and weapons.** Drones, enemy mechs that use the player's systems, and the rest of the weapons: Gatling gun, heavy cannon, more lasers, plasma, and lightning. Laser variants include continuous-beam lasers (damage and heat per second while held) alongside pulse lasers, with different range and heat trade-offs.
 9. **Factions.** Three factions with their colors and army styles, reputation, and reputation-gated shops.
 10. **More mission types.** Defend, escort, convoy raid, and mech hunt.
 11. **Polish.** Difficulty settings menu, tutorial, sound pass, menu and phone UI pass, and a performance check on your phone.
@@ -159,7 +161,19 @@ Starting prompt for the first Claude Code session:
 This is a new game project. Read docs/PLAN.md: it's the full design and build plan. Do milestone 1 (Foundation): set up TypeScript, Phaser and Vite, a GitHub Actions workflow that deploys to GitHub Pages, and a CLAUDE.md summarizing the plan's working rules. Then tell me the Pages link and what to test.
 ```
 
+## Decisions made during development
+
+- Phones are landscape-only; portrait shows a rotate prompt.
+- Throttle is hold-to-move (it maps onto the phone stick).
+- Phones show slightly less of the map than PC so the mech isn't tiny.
+- Weapons fire along the torso facing, not converging on the cursor; aiming with the slow torso is part of the skill.
+- Heat should be a build choice: some builds run hot and need heat management, others barely notice it, with trade-offs both ways.
+- Phone weapon groups: the right stick fires the selected group; a button next to it switches between group 1 and 2. A smoother phone solution is still wanted later.
+- Aim assist on phones stays light.
+
 ## Open questions
+
+- [ ] **Phone weapon firing.** The tap-to-switch button works for now; find something easier to use before release.
 
 Decided so far: power is a build budget, tank controls on PC and direction-based movement on phone, an open-ended sandbox career, and the loan rule for losing your last mech. Still open:
 

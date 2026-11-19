@@ -12,8 +12,8 @@ export const CONTROLS = {
   leftZoneWidth: 0.5,
   /** Inactive left stick is shown here as a hint (from the bottom-left corner). */
   leftStickHome: { x: 135, y: 122 },
-  /** Fire group 2 button: offset from the right stick centre, and radius. */
-  fire2Offset: { x: -98, y: -62 },
+  /** Weapon group swap button: offset from the right stick centre, and radius. */
+  swapOffset: { x: -98, y: -62 },
   buttonRadius: 40,
   /** A floating stick's base never spawns closer than this to the screen edge (beyond its radius). */
   stickEdgeMargin: 26,

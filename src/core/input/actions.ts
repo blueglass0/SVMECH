@@ -19,6 +19,8 @@ export interface Actions {
   aim: Vec;
   fire1: boolean;
   fire2: boolean;
+  /** Touch only: which weapon group the right stick fires (switched with the swap button). */
+  stickGroup: 1 | 2;
   equip1: boolean;
   equip2: boolean;
   interact: boolean;
@@ -31,6 +33,7 @@ export const actions: Actions = {
   aim: { x: 0, y: 0 },
   fire1: false,
   fire2: false,
+  stickGroup: 1,
   equip1: false,
   equip2: false,
   interact: false,
@@ -57,8 +60,8 @@ export interface ButtonView {
   pressed: boolean;
 }
 
-export const touchButtons: { fire2: ButtonView } = {
-  fire2: { x: 0, y: 0, pressed: false },
+export const touchButtons: { swap: ButtonView } = {
+  swap: { x: 0, y: 0, pressed: false },
 };
 
 export function clearHeldActions(): void {

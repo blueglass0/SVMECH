@@ -93,6 +93,9 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
 - Weapons fire along the torso facing from their hardpoint position (no convergence on the
   cursor), so the slow torso matters. Laser is hitscan; ballistics are projectiles.
 - Phone aim assist: stick aim bends halfway toward an enemy within 12° and 650 units.
+- Phone weapon groups: right stick fires `actions.stickGroup`; the ⇄ button next to it toggles 1/2.
+- Planned additions (see `docs/PLAN.md`): fog of war + sensors with M6, destructible terrain
+  as M6b, continuous-beam lasers with M8.
 - Enemies alert neighbours within 650 units when shot. Tanks path with A* (repath ~1.5 s).
 - Player armor is a single pool in M3; M4 splits it per section (`Unit.takeDamage` already
   receives the shot origin for hit-angle detection).

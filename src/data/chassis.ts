@@ -78,8 +78,8 @@ export const CHASSIS: Record<string, ChassisDef> = {
     },
     armor: 600,
     heatCapacity: 100,
-    heatDissipation: 11,
-    ammoCapacity: { ballistic: 900, missile: 0 },
+    heatDissipation: 8,
+    ammoCapacity: { ballistic: 1350, missile: 0 },
     mounts: [
       { id: 'la-b', section: 'leftArm', type: 'ballistic', x: 30, y: -21 },
       { id: 'la-e', section: 'leftArm', type: 'energy', x: 24, y: -27 },

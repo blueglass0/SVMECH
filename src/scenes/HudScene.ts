@@ -147,9 +147,15 @@ export class HudScene extends Phaser.Scene {
       s.base.setVisible(touch).setPosition(s.view.baseX, s.view.baseY).setAlpha(a);
       s.knob.setVisible(touch).setPosition(s.view.knobX, s.view.knobY).setAlpha(a);
     }
-    const b = touchButtons.fire2;
+    const b = touchButtons.swap;
     this.fire2.img.setVisible(touch).setPosition(b.x, b.y).setAlpha(b.pressed ? 1 : 0.6);
     this.fire2.label.setVisible(touch).setPosition(b.x, b.y);
+    this.setTextIfChanged(this.fire2.label, 'swap', `⇄${actions.stickGroup}`);
+    // On phones, light up the group the right stick fires.
+    for (let i = 0; i < this.groupTexts.length; i++) {
+      const active = !touch || actions.stickGroup === i + 1;
+      this.groupTexts[i].setAlpha(active ? 1 : 0.45);
+    }
 
     // Bars (cheap: just scale images).
     const armorFrac = hud.armor / hud.armorMax;
