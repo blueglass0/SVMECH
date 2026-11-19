@@ -26,6 +26,8 @@ export interface MechStats {
   pointDefense?: NonNullable<EquipmentDef['pointDefense']>;
   /** Activated equipment on action 1 (Q) and 2 (E). */
   actions: ('flares' | 'shield')[];
+  /** Fog of war: cone half-angle (degrees), cone range, all-round radius, radar range (0 = none). */
+  vision: { coneDeg: number; range: number; radius: number; radar: number };
 }
 
 export function mechStats(l: Pick<Loadout, 'chassis' | 'weapons' | 'equipment'>): MechStats {
@@ -61,5 +63,12 @@ export function mechStats(l: Pick<Loadout, 'chassis' | 'weapons' | 'equipment'>)
     flares,
     pointDefense: find('pointDefense'),
     actions,
+    vision: {
+      // Several sensors don't stack: the best one counts.
+      coneDeg: c.vision.coneDeg + Math.max(0, ...eq.map((e) => e.sensors?.coneDeg ?? 0)),
+      range: c.vision.range + Math.max(0, ...eq.map((e) => e.sensors?.range ?? 0)),
+      radius: c.vision.radius,
+      radar: Math.max(0, ...eq.map((e) => e.sensors?.radar ?? 0)),
+    },
   };
 }

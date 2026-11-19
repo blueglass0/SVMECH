@@ -23,6 +23,7 @@ import { hud } from '../game/hudState';
 import { PlayerMech } from '../game/units/PlayerMech';
 import { Enemy, Structure, Tank, Turret, createEnemy, type AiContext } from '../game/units/Enemies';
 import { NavGrid } from '../game/world/NavGrid';
+import { FogOverlay } from '../game/world/Fog';
 import { generateDestroyTargets, type MissionMap } from '../game/world/mapgen';
 import type { MissionConfig, MissionOutcome } from '../career/types';
 import { newCareer } from '../career/career';
@@ -38,6 +39,8 @@ const liveMovement: ChassisMovement = { ...CHASSIS[STARTER_CHASSIS].movement };
 
 const CHUNK = 800;
 const END_DELAY = 1.8;
+/** Reach within this distance of the evac point to finish. */
+const EVAC_RADIUS = 80;
 /** Enemies within this distance of a unit that gets shot join the fight. */
 const ALERT_RADIUS = 650;
 
@@ -74,6 +77,13 @@ export class MapScene extends Phaser.Scene {
   private smokeTimer = 0;
   private tmp: Vec = { x: 0, y: 0 };
   private warnTimer = 0;
+  private evac: Vec | null = null;
+  private fog?: FogOverlay;
+  private visionTimer = 0;
+  /** Dev toggle: fog of war off shows every enemy. */
+  fogEnabled = !new URLSearchParams(window.location.search).has('nofog');
+  private evacImg?: Phaser.GameObjects.Image;
+  private briefingUntil = 4.5;
   private lockTarget: Enemy | null = null;
   private lockImg!: Phaser.GameObjects.Image;
 
@@ -86,6 +96,9 @@ export class MapScene extends Phaser.Scene {
     this.config = data.contract ? (data as MissionConfig) : quickConfig(urlSeed || randomSeed());
     this.seed = this.config.contract.seed;
     this.withdrew = false;
+    this.evac = null;
+    this.evacImg = undefined;
+    this.briefingUntil = 4.5;
     this.state = 'active';
     this.endTimer = this.elapsed = this.kills = this.hits = this.damageDealt = 0;
     this.enemies = [];
@@ -118,6 +131,8 @@ export class MapScene extends Phaser.Scene {
     // Phone equipment buttons only appear for fitted, activated equipment.
     touchButtons.equip1.visible = this.player.loadout.actions.length >= 1;
     touchButtons.equip2.visible = this.player.loadout.actions.length >= 2;
+    this.fog = new FogOverlay(this, this.player.loadout.vision);
+    this.visionTimer = 0;
     this.lockImg = this.add.image(0, 0, 'lock').setScale(1 / ART_SCALE).setDepth(12).setVisible(false);
     this.lockTarget = null;
 
@@ -198,6 +213,7 @@ export class MapScene extends Phaser.Scene {
     this.combat.listenerX = p.x;
     this.combat.listenerY = p.y;
     this.combat.update(dt);
+    this.updateVision(dt);
     this.emitDamageSmoke(dt);
     this.fx.update(dt);
     this.updateMission(dt);
@@ -215,6 +231,41 @@ export class MapScene extends Phaser.Scene {
   }
 
   /**
+   * Fog of war: an enemy is visible inside the vision cone (in range, with line
+   * of sight) or within the close all-round radius; radar shows blips through
+   * walls. Checked 10 times a second; the overlay follows the torso every frame.
+   */
+  private updateVision(dt: number): void {
+    const p = this.player;
+    const v = p.loadout.vision;
+    const alpha = !this.fogEnabled ? 0 : settings.fog === 'dark' ? 0.93 : 0.62;
+    this.fog?.update(p.x, p.y, p.motor.torsoAngle, p.alive ? alpha : 0);
+    this.visionTimer -= dt;
+    if (this.visionTimer > 0) return;
+    this.visionTimer = 0.1;
+    const cone = v.coneDeg * DEG;
+    for (const e of this.enemies) {
+      if (!e.alive) continue;
+      if (!this.fogEnabled || !p.alive) {
+        e.setDetection('visible', this.elapsed);
+        continue;
+      }
+      const dx = e.x - p.x;
+      const dy = e.y - p.y;
+      const d = Math.hypot(dx, dy);
+      let seen = d <= v.radius + e.radius;
+      if (!seen && d <= v.range + e.radius) {
+        // Count the unit as in the cone if any part of it is (its angular size at this distance).
+        const edge = Math.asin(Math.min(1, e.radius / Math.max(d, 1)));
+        const off = Math.abs(wrapAngle(Math.atan2(dy, dx) - p.motor.torsoAngle));
+        seen = off <= cone + edge && this.world.lineOfSight(p.x, p.y, e.x, e.y);
+      }
+      const radar = !seen && v.radar > 0 && d <= v.radar;
+      e.setDetection(seen ? 'visible' : radar ? 'radar' : 'hidden', this.elapsed);
+    }
+  }
+
+  /**
    * Seeking missiles lock onto the enemy closest to the torso's aim line
    * (within 20° and missile range). Shown with a reticle.
    */
@@ -226,7 +277,7 @@ export class MapScene extends Phaser.Scene {
       let bestDiff = 20 * DEG;
       const range = seeker.def.range;
       for (const e of this.enemies) {
-        if (!e.alive) continue;
+        if (!e.alive || e.detection !== 'visible') continue;
         const dx = e.x - p.x;
         const dy = e.y - p.y;
         if (dx * dx + dy * dy > range * range) continue;
@@ -242,6 +293,34 @@ export class MapScene extends Phaser.Scene {
     this.lockImg.setVisible(!!best);
     if (best) this.lockImg.setPosition(best.x, best.y).setRotation(this.elapsed * 1.5);
     return best;
+  }
+
+  /** Objectives done: open an evac zone a short walk away, preferably away from enemies. */
+  private openEvac(): void {
+    const p = this.player;
+    let best: Vec | null = null;
+    let bestScore = -Infinity;
+    for (let i = 0; i < 32; i++) {
+      const a = (i / 32) * Math.PI * 2;
+      const d = 650 + (i % 3) * 120;
+      const x = p.x + Math.cos(a) * d;
+      const y = p.y + Math.sin(a) * d;
+      if (this.world.circleBlocked(x, y, EVAC_RADIUS)) continue;
+      let nearest = 2000;
+      for (const e of this.enemies) if (e.alive) nearest = Math.min(nearest, Math.hypot(e.x - x, e.y - y));
+      if (nearest > bestScore) {
+        bestScore = nearest;
+        best = { x, y };
+      }
+    }
+    // Fallback: the drop point is always clear.
+    this.evac = best ?? { x: this.map.spawn.x, y: this.map.spawn.y };
+    this.evacImg = this.add.image(this.evac.x, this.evac.y, 'evac').setScale(1 / ART_SCALE).setDepth(2);
+    hud.objectiveLabel = 'Reach the evac zone';
+    hud.objectiveTotal = 0;
+    hud.briefing = 'Uplinks down. Get to the evac zone.';
+    this.briefingUntil = this.elapsed + 4;
+    play('ui', 1);
   }
 
   /** Leave the battlefield: the mission fails but the mech comes home as it is. */
@@ -272,7 +351,12 @@ export class MapScene extends Phaser.Scene {
 
   // --- Dev tools (tuning panel) ---
 
+  /** Dev: destroy every target; pressed again once evac is open, finishes the mission. */
   devWin(): void {
+    if (this.evac && this.state === 'active') {
+      this.state = 'won';
+      return;
+    }
     for (const s of this.structures) s.takeDamage(1e6, s.x, s.y);
   }
 
@@ -337,7 +421,7 @@ export class MapScene extends Phaser.Scene {
     let best = 12 * DEG;
     let bestDiff = 0;
     for (const e of this.enemies) {
-      if (!e.alive) continue;
+      if (!e.alive || e.detection !== 'visible') continue;
       const dx = e.x - p.x;
       const dy = e.y - p.y;
       if (dx * dx + dy * dy > 650 * 650) continue;
@@ -398,8 +482,11 @@ export class MapScene extends Phaser.Scene {
         this.fx.explosion(p.x, p.y, 1.6);
         play('bigExplode', 1);
         this.rebuildBodies();
-      } else if (done === this.structures.length) {
+      } else if (done === this.structures.length && !this.evac) {
+        this.openEvac();
+      } else if (this.evac && Math.hypot(p.x - this.evac.x, p.y - this.evac.y) < EVAC_RADIUS) {
         this.state = 'won';
+        play('ui', 1);
       }
       // Warning beeps: overheating, or missiles homing in.
       const hot = p.alive && p.shutdown === 0 && p.heatFraction >= hud.heatWarnAt;
@@ -421,8 +508,8 @@ export class MapScene extends Phaser.Scene {
         bonusAchieved: this.state === 'won' && this.bonusState() === 'done',
         time: this.elapsed,
         kills: this.kills,
-        targetsDestroyed: hud.objectiveDone,
-        targetsTotal: hud.objectiveTotal,
+        targetsDestroyed: this.structures.filter((t) => !t.alive).length,
+        targetsTotal: this.structures.length,
         damageDealt: this.damageDealt,
         damageTaken: p.stats.damageTaken,
         shots: p.stats.shots,
@@ -539,9 +626,14 @@ export class MapScene extends Phaser.Scene {
     for (const e of this.enemies) {
       if (!e.alive) continue;
       if (e instanceof Structure) hud.targets.push(e);
-      else if (e.engaged && Math.hypot(e.x - p.x, e.y - p.y) < 1100) hud.threats.push(e);
+      // Threat arrows only for enemies you know about: detected now, or seen in the last few seconds.
+      else if (e.engaged && Math.hypot(e.x - p.x, e.y - p.y) < 1100 && (e.detection !== 'hidden' || this.elapsed - e.lastSeenAt < 3)) {
+        hud.threats.push(e);
+      }
     }
-    if (this.elapsed > 4.5) hud.briefing = '';
+    if (this.elapsed > this.briefingUntil) hud.briefing = '';
+    if (this.evac) hud.targets.push(this.evac);
+    this.evacImg?.setRotation(this.elapsed * 0.6);
     hud.bonusState = this.bonusState();
     if (this.config.contract.bonus.kind === 'fast' && hud.bonusState === 'open') {
       const left = Math.max(0, (this.config.contract.bonus.seconds ?? 0) - this.elapsed);

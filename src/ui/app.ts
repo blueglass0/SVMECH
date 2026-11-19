@@ -9,6 +9,7 @@ import { isEquipment, isWeapon, itemName, itemPrice } from '../data/items';
 import { mechStats } from '../game/mechStats';
 import { SECTIONS } from '../game/units/SectionDamage';
 import { play } from '../core/audio';
+import { settings, saveSettings } from '../core/settings';
 import { clockTime, h, money, signedMoney } from './h';
 import type { MapScene } from '../scenes/MapScene';
 
@@ -635,6 +636,17 @@ export class App {
           },
           'Withdraw from mission',
         ),
+        h(
+          'button',
+          {
+            onclick: (e: Event) => {
+              settings.fog = settings.fog === 'faded' ? 'dark' : 'faded';
+              saveSettings();
+              (e.target as HTMLButtonElement).textContent = fogLabel();
+            },
+          },
+          fogLabel(),
+        ),
         h('p', { class: 'muted small' }, "Withdrawing fails the contract: no pay, and fuel and ammo are already spent. Your mech comes home as it is."),
       ),
     );
@@ -668,6 +680,10 @@ export class App {
   }
 }
 
+function fogLabel(): string {
+  return `Outside your vision: ${settings.fog === 'faded' ? 'terrain faded' : 'dark'}`;
+}
+
 function row(label: string, detail: string, value: string, cls = ''): HTMLElement {
   return h('div', { class: `row ${cls}` }, h('span', null, label, detail ? h('span', { class: 'muted small' }, ` ${detail}`) : null), h('span', { class: 'num' }, value));
 }
@@ -689,9 +705,10 @@ function equipmentStats(e: EquipmentDef): string {
   if (e.dissipation) parts.push(`sheds ${e.dissipation} heat/s`);
   if (e.armor) parts.push(`+${e.armor.torso + e.armor.leftArm + e.armor.rightArm + e.armor.legs} armor`);
   if (e.ammo) parts.push(e.ammo.ballistic ? `+${e.ammo.ballistic} rounds` : `+${e.ammo.missile} missiles`);
-  if (e.shield) parts.push(`absorbs ${e.shield.capacity} for ${e.shield.duration}s, every ${e.shield.cooldown}s`);
+  if (e.shield) parts.push(`absorbs ${e.shield.capacity} for ${e.shield.duration}s (+${e.shield.heatPerSecond} heat/s), every ${e.shield.cooldown}s`);
   if (e.flares) parts.push(`${e.flares.charges} flares per mission, break missile locks`);
   if (e.pointDefense) parts.push(`shoots missiles within ${e.pointDefense.range}`);
+  if (e.sensors) parts.push(`vision +${e.sensors.range} range, +${e.sensors.coneDeg}° cone${e.sensors.radar ? `, radar ${e.sensors.radar}` : ''}`);
   parts.push(`${e.tonnage} t`);
   if (e.power) parts.push(`draws ${e.power} power`);
   return parts.join(' · ');

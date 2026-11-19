@@ -210,6 +210,7 @@ export class PlayerMech implements Unit {
     e.flareCooldown = Math.max(0, e.flareCooldown - dt);
     if (e.shieldUp > 0) {
       e.shieldUp = Math.max(0, e.shieldUp - dt);
+      this.heat += (L.shield?.heatPerSecond ?? 0) * dt;
       if (e.shieldUp === 0 || e.shieldPool <= 0) e.shieldUp = 0;
     }
     const pressed = [input.equip1 && !this.prevEquip[0], input.equip2 && !this.prevEquip[1]];
@@ -227,7 +228,6 @@ export class PlayerMech implements Unit {
         e.shieldUp = L.shield.duration;
         e.shieldPool = L.shield.capacity;
         e.shieldCooldown = L.shield.cooldown;
-        this.heat += L.shield.heat;
         play('shield', 1);
       }
     });

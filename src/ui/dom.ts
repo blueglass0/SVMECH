@@ -162,6 +162,12 @@ function tuningPanel(game: Phaser.Game, app: App): HTMLElement {
   button(dev, 'Win mission', () => map()?.devWin());
   button(dev, 'Spawn tank', () => map()?.devSpawnTank());
   button(dev, 'Spawn missile tank', () => map()?.devSpawnTank('missileTank'));
+  const fogBtn = button(dev, 'Fog of war: on', () => {
+    const m = map();
+    if (!m) return;
+    m.fogEnabled = !m.fogEnabled;
+    fogBtn.textContent = `Fog of war: ${m.fogEnabled ? 'on' : 'off'}`;
+  });
   const god = button(dev, 'Invulnerable: off', () => {
     const on = map()?.devToggleInvulnerable();
     god.textContent = `Invulnerable: ${on ? 'on' : 'off'}`;

@@ -10,12 +10,14 @@ export interface Settings {
   /** Movement scheme per input device. */
   scheme: Record<InputDevice, ControlScheme>;
   muted: boolean;
+  /** Fog of war look: 'faded' keeps terrain dimly visible outside your vision, 'dark' hides it. */
+  fog: 'faded' | 'dark';
 }
 
 const KEY = 'steel-vulture.settings.v1';
 
 function defaults(): Settings {
-  return { scheme: { kbm: 'tank', touch: 'direction' }, muted: false };
+  return { scheme: { kbm: 'tank', touch: 'direction' }, muted: false, fog: 'faded' };
 }
 
 function load(): Settings {

@@ -267,6 +267,32 @@ export function bakeCombatArt(scene: Phaser.Scene): void {
     g.fillStyle(0x4fd8ff, 0.12).fillCircle(0, 0, 42);
     g.lineStyle(2, 0x7fe6ff, 0.7).strokeCircle(0, 0, 42);
   });
+  // Evac zone: a green landing ring with chevrons pointing in.
+  bake(scene, 'evac', 180, 180, (g) => {
+    g.fillStyle(0x8fd16a, 0.12).fillCircle(0, 0, 80);
+    g.lineStyle(4, 0x8fd16a, 0.9).strokeCircle(0, 0, 80);
+    g.lineStyle(2, 0x8fd16a, 0.5).strokeCircle(0, 0, 60);
+    g.fillStyle(0x8fd16a, 0.9);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      const c = Math.cos(a);
+      const s = Math.sin(a);
+      g.fillTriangle(c * 74 - s * 10, s * 74 + c * 10, c * 74 + s * 10, s * 74 - c * 10, c * 56, s * 56);
+    }
+  });
+
+  // Fog of war: last-seen marker and radar blip.
+  bake(scene, 'ghost', 40, 40, (g) => {
+    g.lineStyle(2.5, 0xff5a4f, 0.9);
+    g.strokeRect(-11, -11, 22, 22);
+    g.lineBetween(-5, 0, 5, 0);
+    g.lineBetween(0, -5, 0, 5);
+  });
+  bake(scene, 'blip', 36, 36, (g) => {
+    g.fillStyle(0xff5a4f, 0.9).fillCircle(0, 0, 6);
+    g.lineStyle(2, 0xff5a4f, 0.45).strokeCircle(0, 0, 14);
+  });
+
   // Missile lock reticle on a target.
   bake(scene, 'lock', 70, 70, (g) => {
     g.lineStyle(2.5, 0xff9a3d, 0.95);

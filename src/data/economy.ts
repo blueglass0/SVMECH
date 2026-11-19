@@ -75,6 +75,8 @@ export const SHOP_STOCK = [
   'shieldGenerator',
   'flareLauncher',
   'pointDefense',
+  'sensorSuite',
+  'radarArray',
 ];
 
 /** Contract flavour: faction-neutral until milestone 9 adds the three factions. */
