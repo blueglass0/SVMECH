@@ -4,6 +4,7 @@ import { initViewport, trackViewport } from './core/viewport';
 import { BootScene } from './scenes/BootScene';
 import { MapScene } from './scenes/MapScene';
 import { HudScene } from './scenes/HudScene';
+import { mountDomUi } from './ui/dom';
 
 const container = document.getElementById('game')!;
 document.getElementById('boot')?.remove();
@@ -25,10 +26,14 @@ const game = new Phaser.Game({
     powerPreference: 'default',
   },
   input: { activePointers: 3 }, // two thumbs plus a spare
+  // Phaser's delta smoothing clamps frames to 1/60 s when it thinks the window is unfocused,
+  // which makes the game run in slow motion. Use real frame time; scenes clamp long frames.
+  fps: { smoothStep: false },
   scene: [BootScene, MapScene, HudScene],
 });
 
 trackViewport(game, container);
+mountDomUi(game, container);
 
 if (import.meta.env.DEV) {
   (window as unknown as { game: Phaser.Game }).game = game;
