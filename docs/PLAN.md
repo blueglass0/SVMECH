@@ -142,7 +142,7 @@ Milestones 1 to 5 are the prototype: a complete, playable loop with one mech, a 
 8. **Enemies and weapons.** Drones, enemy mechs that use the player's systems, and the rest of the weapons: Gatling gun, heavy cannon, more lasers, plasma, and lightning. Laser variants include continuous-beam lasers (damage and heat per second while held) alongside pulse lasers, with different range and heat trade-offs.
 9. **Factions.** Three factions with their colors and army styles, reputation, and reputation-gated shops.
 10. **More mission types.** Defend, escort, convoy raid, and mech hunt.
-11. **Polish.** Difficulty settings menu, tutorial, sound pass, menu and phone UI pass, and a performance check on your phone.
+11. **Polish.** Difficulty settings menu, tutorial, sound pass, menu and phone UI pass, and a performance check on your phone. The phone UI pass should rethink the buttons around the right stick (weapon swap, two equipment actions, interact), which get crowded as features are added.
 12. **Optional final mission.** Maybe, someday.
 
 ## Working rules for Claude Code

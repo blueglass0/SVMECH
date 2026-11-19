@@ -1,9 +1,9 @@
 /**
  * Equipment for internal slots: one reactor, plus heat sinks, armor, ammo
- * bins, shield, flares and point defense. Sensors arrive with fog of war.
+ * bins, shield, flares, point defense and sensors.
  * Distances in world units, time in seconds.
  */
-export type EquipmentKind = 'reactor' | 'heatSink' | 'armor' | 'ammoBin' | 'shield' | 'flares' | 'pointDefense';
+export type EquipmentKind = 'reactor' | 'heatSink' | 'armor' | 'ammoBin' | 'shield' | 'flares' | 'pointDefense' | 'sensors';
 
 export interface EquipmentDef {
   id: string;
@@ -23,12 +23,20 @@ export interface EquipmentDef {
   armor?: { torso: number; leftArm: number; rightArm: number; legs: number };
   /** Ammo bin: extra capacity. */
   ammo?: { ballistic: number; missile: number };
-  /** Shield: absorbs up to `capacity` damage for `duration` seconds after activation. */
-  shield?: { capacity: number; duration: number; cooldown: number; heat: number };
+  /**
+   * Shield: absorbs up to `capacity` damage for `duration` seconds after activation,
+   * adding `heatPerSecond` while it's up. `cooldown` counts from activation.
+   */
+  shield?: { capacity: number; duration: number; cooldown: number; heatPerSecond: number };
   /** Flares: break locks of missiles chasing you. */
   flares?: { charges: number; cooldown: number };
   /** Point defense: shoots incoming missiles automatically. */
   pointDefense?: { range: number; fireRate: number; damage: number; accuracy: number };
+  /**
+   * Sensors: extra vision range and cone half-angle (degrees), and radar that
+   * detects enemies through walls within `radar` units (shown as blips).
+   */
+  sensors?: { range: number; coneDeg: number; radar: number };
 }
 
 export const EQUIPMENT: Record<string, EquipmentDef> = {
@@ -123,7 +131,7 @@ export const EQUIPMENT: Record<string, EquipmentDef> = {
     tonnage: 3,
     power: 4,
     price: 45000,
-    shield: { capacity: 140, duration: 4, cooldown: 14, heat: 12 },
+    shield: { capacity: 160, duration: 7, cooldown: 16, heatPerSecond: 3 },
   },
   flareLauncher: {
     id: 'flareLauncher',
@@ -144,6 +152,26 @@ export const EQUIPMENT: Record<string, EquipmentDef> = {
     power: 3,
     price: 26000,
     pointDefense: { range: 190, fireRate: 6, damage: 1, accuracy: 0.7 },
+  },
+  sensorSuite: {
+    id: 'sensorSuite',
+    name: 'Sensor suite',
+    kind: 'sensors',
+    slots: 1,
+    tonnage: 1,
+    power: 2,
+    price: 16000,
+    sensors: { range: 140, coneDeg: 15, radar: 0 },
+  },
+  radarArray: {
+    id: 'radarArray',
+    name: 'Radar array',
+    kind: 'sensors',
+    slots: 2,
+    tonnage: 2,
+    power: 4,
+    price: 42000,
+    sensors: { range: 220, coneDeg: 20, radar: 480 },
   },
 };
 

@@ -64,6 +64,12 @@ export interface ChassisDef {
   /** Ammo pool capacity before ammo bins. */
   ammoCapacity: { ballistic: number; missile: number };
   mounts: MountDef[];
+  /**
+   * What the pilot can see (fog of war): a cone in front of the torso
+   * (`coneDeg` is the half-angle) out to `range`, plus everything within
+   * `radius` all around. Sensors add to this.
+   */
+  vision: { coneDeg: number; range: number; radius: number };
 }
 
 export const CHASSIS: Record<string, ChassisDef> = {
@@ -99,6 +105,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
       { id: 'ra-e', section: 'rightArm', type: 'energy', x: 24, y: 27 },
       { id: 't-m', section: 'torso', type: 'missile', x: 4, y: -10 },
     ],
+    vision: { coneDeg: 55, range: 620, radius: 210 },
   },
 };
 

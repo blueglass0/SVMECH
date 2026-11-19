@@ -244,7 +244,11 @@ export class HudScene extends Phaser.Scene {
     this.textTimer -= delta;
     if (this.textTimer <= 0) {
       this.textTimer = 100;
-      this.setTextIfChanged(this.objective, 'obj', `${hud.objectiveLabel.toUpperCase()}  ${hud.objectiveDone} / ${hud.objectiveTotal}`);
+      this.setTextIfChanged(
+        this.objective,
+        'obj',
+        hud.objectiveTotal > 0 ? `${hud.objectiveLabel.toUpperCase()}  ${hud.objectiveDone} / ${hud.objectiveTotal}` : hud.objectiveLabel.toUpperCase(),
+      );
       const keys = touch ? ['', ''] : ['Q ', 'E '];
       this.setTextIfChanged(this.equipText, 'eqt', hud.equipment.map((e, i) => `${keys[i]}${e.label}${e.active ? ' ●' : ''}`).join('     '));
       const mark = hud.bonusState === 'done' ? '  ✓' : hud.bonusState === 'failed' ? '  ✗' : '';

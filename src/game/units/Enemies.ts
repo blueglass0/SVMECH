@@ -23,6 +23,8 @@ export interface AiContext {
   difficulty: CombatDifficulty;
 }
 
+export type Detection = 'visible' | 'radar' | 'hidden';
+
 /** How often enemies re-check whether they can see the player, seconds. */
 const SENSE_INTERVAL = 0.25;
 /** After losing sight this long (and reaching the last seen spot), enemies give up the chase. */
@@ -45,6 +47,14 @@ export abstract class Enemy implements Unit {
   protected lastSeen: Vec = { x: 0, y: 0 };
   private barBg: Phaser.GameObjects.Image;
   private barFill: Phaser.GameObjects.Image;
+  /** Fog of war: what the player currently knows about this unit. */
+  detection: Detection = 'visible';
+  /** Mission time the player last saw it (-Infinity = never). */
+  lastSeenAt = -Infinity;
+  private seenX = 0;
+  private seenY = 0;
+  private ghost?: Phaser.GameObjects.Image;
+  private blip?: Phaser.GameObjects.Image;
 
   constructor(
     protected scene: Phaser.Scene,
@@ -60,6 +70,36 @@ export abstract class Enemy implements Unit {
 
   abstract update(dt: number, ctx: AiContext): void;
   protected abstract onDestroyed(ctx: Effects): void;
+  /** The sprites that show this unit (hidden by fog of war). */
+  protected abstract parts(): Phaser.GameObjects.Image[];
+
+  /**
+   * Fog of war. Visible: drawn normally. Radar: a blip. Hidden: a fading
+   * marker where it was last seen (turrets and targets keep theirs; they don't move).
+   */
+  setDetection(level: Detection, now: number): void {
+    if (!this.alive) return;
+    this.detection = level;
+    const visible = level === 'visible';
+    for (const p of this.parts()) p.setVisible(visible);
+    if (visible) {
+      this.seenX = this.x;
+      this.seenY = this.y;
+      this.lastSeenAt = now;
+    }
+    if (level === 'radar' || this.blip) {
+      this.blip ??= this.scene.add.image(0, 0, 'blip').setScale(1 / ART_SCALE).setDepth(14);
+      this.blip.setVisible(level === 'radar').setPosition(this.x, this.y);
+    }
+    const remembered = !visible && level !== 'radar' && this.lastSeenAt > -Infinity;
+    if (remembered || this.ghost) {
+      this.ghost ??= this.scene.add.image(0, 0, 'ghost').setScale(1 / ART_SCALE).setDepth(14);
+      const age = now - this.lastSeenAt;
+      const alpha = this.def.kind === 'tank' ? 0.55 * Math.max(0, 1 - age / 6) : 0.5;
+      this.ghost.setVisible(remembered && alpha > 0).setPosition(this.seenX, this.seenY).setAlpha(alpha);
+    }
+    this.updateBar();
+  }
 
   /** Alert this unit to the player's position (heard combat nearby, or got shot). */
   alert(at: Vec): void {
@@ -82,11 +122,15 @@ export abstract class Enemy implements Unit {
   destroy(fx: Effects): void {
     this.barBg.setVisible(false);
     this.barFill.setVisible(false);
+    this.ghost?.setVisible(false);
+    this.blip?.setVisible(false);
     this.onDestroyed(fx);
+    // Wrecks are terrain: always shown, even if the unit died out of sight.
+    for (const p of this.parts()) p.setVisible(true);
   }
 
   protected updateBar(): void {
-    const show = this.alive && this.hp < this.maxHp;
+    const show = this.alive && this.hp < this.maxHp && this.detection === 'visible';
     const y = this.y - this.radius - 14;
     this.barBg.setVisible(show).setPosition(this.x - BAR_WIDTH / 2 - 1, y).setDisplaySize(BAR_WIDTH + 2, 6);
     this.barFill
@@ -273,6 +317,10 @@ export class Tank extends Gunner {
     this.setGoal(this.home.x + Math.cos(a) * r, this.home.y + Math.sin(a) * r);
   }
 
+  protected parts(): Phaser.GameObjects.Image[] {
+    return this.alive ? [this.hull, this.gun] : [this.hull];
+  }
+
   protected onDestroyed(fx: Effects): void {
     this.hull.setTexture('tank-hull-wreck').setDepth(2);
     this.gun.setVisible(false);
@@ -301,6 +349,10 @@ export class Turret extends Gunner {
     this.gun.setRotation(this.gunAngle);
   }
 
+  protected parts(): Phaser.GameObjects.Image[] {
+    return this.alive ? [this.base, this.gun] : [this.base];
+  }
+
   protected onDestroyed(fx: Effects): void {
     this.base.setTexture('turret-base-wreck').setDepth(2);
     this.gun.setVisible(false);
@@ -323,6 +375,10 @@ export class Structure extends Enemy {
 
   pulse(time: number): void {
     if (this.alive) this.img.setAlpha(0.85 + Math.sin(time * 0.004) * 0.15);
+  }
+
+  protected parts(): Phaser.GameObjects.Image[] {
+    return [this.img];
   }
 
   protected onDestroyed(fx: Effects): void {

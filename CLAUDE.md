@@ -4,10 +4,9 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 
 ## Current milestone
 
-**Milestone 6 part 1 — Loadout depth and missiles: built, awaiting the user's playtest.**
-M1–M5 (the prototype) signed off. M6 is split: part 1 = equipment, missiles, countermeasures;
-part 2 (next) = fog of war, line of sight and sensors. Don't start part 2 until the user has
-played part 1.
+**Milestone 6 part 2 — Fog of war, line of sight, sensors (+ evac zone, shield tweak): built,
+awaiting the user's playtest.** M1–M5 and M6 part 1 signed off. After M6 sign-off, ask which
+milestone is next (plan order: 6b destructible terrain, then 7 hangar and backups).
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
 
 ## Decisions made after the plan
@@ -156,6 +155,24 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   a reticle; without a lock they fly straight. Rockets are unguided salvos with splash.
   Enemy missile carriers (`missileTank`) fire seeking missiles; HUD warns "MISSILE INCOMING".
 - Vulture: base 30 t + equipment, 8 slots, torso missile hardpoint, base cooling 6/s.
+- Shield (after M6 feedback): 7 s, 160 capacity, +3 heat/s while up, 16 s cooldown.
+
+## Fog of war and evac notes (M6 part 2)
+
+- Vision per chassis (`ChassisDef.vision`: cone half-angle, range, all-round radius) plus the
+  best sensor fitted (`sensors` equipment: +range, +cone, radar). Derived in `mechStats().vision`.
+- `MapScene.updateVision` (10 Hz): enemy visible if within the radius, or in the torso cone and
+  range with line of sight; radar range shows a blip through walls; otherwise hidden with a
+  last-seen marker (tanks fade after 6 s, turrets/targets stay). `Enemy.setDetection`.
+- Missile locks, aim assist and threat arrows use only detected enemies. Hit arcs always show.
+  Target arrows always show (mission intel). Wrecks are always visible.
+- Overlay (`world/Fog.ts`): one 512² canvas texture baked per mission from the vision stats,
+  drawn as one rotated sprite. Setting `settings.fog`: 'faded' (default, terrain dimly visible)
+  or 'dark'; toggle in the pause menu. Dev: `?nofog` or the Tune panel's fog toggle.
+  No occlusion shadows behind buildings (that's the expensive version; logic still uses LOS).
+- Evac: when all targets are down, an evac zone opens ~650–890 units away (prefers spots far
+  from living enemies); reaching it wins. Dying before evac fails the mission. Dev "Win
+  mission": first press destroys targets, second finishes.
 
 ## Conventions
 
