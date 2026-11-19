@@ -5,13 +5,15 @@ export const CONTROLS = {
   /** Stick input below this fraction is ignored. */
   stickDeadZone: 0.15,
   /** Right stick centre: distance from the bottom-right corner. */
-  rightStickInset: { x: 110, y: 100 },
+  rightStickInset: { x: 135, y: 122 },
   /** A touch this many radii from the right stick centre grabs it. */
   rightStickGrab: 1.7,
   /** Left stick spawns wherever the thumb lands in the left part of the screen. */
   leftZoneWidth: 0.5,
   /** Inactive left stick is shown here as a hint (from the bottom-left corner). */
-  leftStickHome: { x: 110, y: 100 },
+  leftStickHome: { x: 135, y: 122 },
+  /** A floating stick's base never spawns closer than this to the screen edge (beyond its radius). */
+  stickEdgeMargin: 26,
 } as const;
 
 export const CAMERA = {

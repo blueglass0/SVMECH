@@ -61,9 +61,10 @@ export class TouchSource {
       this.left.pointerId = p.id;
       const v = this.left.view;
       v.active = true;
-      // Keep the whole stick on screen.
-      v.baseX = Math.max(R, Math.min(x, Viewport.cssWidth - R));
-      v.baseY = Math.max(R, Math.min(y, Viewport.cssHeight - R));
+      // Keep the whole stick on screen, with room so the thumb doesn't hit the phone's edge.
+      const e = R + CONTROLS.stickEdgeMargin;
+      v.baseX = Math.max(e, Math.min(x, Viewport.cssWidth - e));
+      v.baseY = Math.max(e, Math.min(y, Viewport.cssHeight - e));
       this.drag(this.left, x, y, true);
     }
   }

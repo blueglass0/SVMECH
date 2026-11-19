@@ -54,12 +54,12 @@ export function bakeArt(scene: Phaser.Scene): void {
   });
 
   // Leg heading marker on the ground: where the legs are walking (the torso marker is orange).
-  bake(scene, 'leg-tick', 20, 24, (g) => {
-    g.fillStyle(0xc3ccd3, 0.45);
+  bake(scene, 'leg-tick', 24, 28, (g) => {
+    g.fillStyle(0xd6dde3, 0.7);
     g.beginPath();
-    g.moveTo(-4, -9);
-    g.lineTo(6, 0);
-    g.lineTo(-4, 9);
+    g.moveTo(-5, -11);
+    g.lineTo(8, 0);
+    g.lineTo(-5, 11);
     g.lineTo(-1, 0);
     g.closePath();
     g.fillPath();
@@ -94,12 +94,12 @@ export function bakeArt(scene: Phaser.Scene): void {
   });
 
   // Torso facing marker: a small chevron.
-  bake(scene, 'aim-chevron', 20, 20, (g) => {
-    g.lineStyle(2.5, C.accent, 0.9);
+  bake(scene, 'aim-chevron', 24, 24, (g) => {
+    g.lineStyle(3.5, C.accent, 1);
     g.beginPath();
-    g.moveTo(-5, -7);
-    g.lineTo(4, 0);
-    g.lineTo(-5, 7);
+    g.moveTo(-6, -8);
+    g.lineTo(5, 0);
+    g.lineTo(-6, 8);
     g.strokePath();
   });
 

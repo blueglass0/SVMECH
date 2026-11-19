@@ -4,14 +4,19 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 
 ## Current milestone
 
-**Milestone 2 — Movement feel: built, awaiting the user's playtest and sign-off.**
-M1 (Foundation) signed off. Do not start milestone 3 (Combat core) until the user signs off M2.
-Expect a tuning loop: the user tunes with the `?debug` Tune panel and pastes values back;
-put them in `src/data/chassis.ts`.
+**Milestone 3 — Combat core: in progress.** M1 and M2 signed off.
+Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
 
 ## Decisions made after the plan
 
 - **Phones are landscape-only.** Portrait shows a "rotate your phone" prompt and pauses the game.
+- **Throttle is hold-to-move** (release W/S or the stick and the mech coasts to a stop), not a
+  persistent MechWarrior-style throttle setting. Chosen because it maps onto the phone stick.
+- **Phones see slightly less of the map** (640 vs 720 world units on the short side) so the mech
+  isn't tiny. PC view size is approved as is.
+- **Chassis feel:** heavier chassis get lower turn rates and more momentum (lower accel/decel),
+  lights turn and accelerate quicker. The movement numbers in `chassis.ts` are enough to make
+  chassis feel distinct (user-approved, M2).
 
 ## Stack
 

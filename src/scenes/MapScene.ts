@@ -146,6 +146,8 @@ export class MapScene extends Phaser.Scene {
   private fitCamera(): void {
     const cam = this.cameras.main;
     cam.setSize(Viewport.width, Viewport.height);
-    cam.setZoom(clamp(Math.min(Viewport.width, Viewport.height) / DISPLAY.viewShortAxis, 0.1, 10));
+    const small = Math.min(Viewport.cssWidth, Viewport.cssHeight) < DISPLAY.smallScreenCss;
+    const view = small ? DISPLAY.viewShortAxisSmall : DISPLAY.viewShortAxis;
+    cam.setZoom(clamp(Math.min(Viewport.width, Viewport.height) / view, 0.1, 10));
   }
 }
