@@ -31,9 +31,9 @@ export const ECONOMY = {
   /** Field stations (ammo depot, repair bay, swap station) on some maps. */
   field: {
     /** Field services cost this many times the hangar price. */
-    markup: 1.5,
+    markup: 3,
     /** Paying the cargo crew to swap your mech for the backup. */
-    swapFee: 8000,
+    swapFee: 16000,
     /** How many stations a map gets, and the chance each one is a swap station. */
     stationsPerMap: [1, 2] as [number, number],
     swapChance: 0.35,
@@ -79,12 +79,21 @@ export const SHOP_STOCK = [
   'autocannon',
   'smallLaser',
   'laser',
+  'gatling',
+  'heavyCannon',
+  'pulseLaser',
+  'largeLaser',
+  'beamLaser',
+  'heavyBeamLaser',
+  'plasma',
+  'lightning',
   'rocketPod',
   'missilePack',
   // Equipment
   'lightReactor',
   'standardReactor',
   'heavyReactor',
+  'assaultReactor',
   'heatSink',
   'doubleHeatSink',
   'armorPlating',

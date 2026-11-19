@@ -258,6 +258,49 @@ export function bakeCombatArt(scene: Phaser.Scene): void {
     g.fillStyle(0xffd27a, 0.4).fillCircle(0, 0, 6);
     g.fillStyle(0xffffff, 1).fillCircle(0, 0, 2.5);
   });
+  // More beams, all 64 long so the same code stretches them.
+  bake(scene, 'beam-pulse', 64, 8, (g) => {
+    g.fillStyle(0x6cff9a, 0.3).fillRect(-32, -3, 64, 6);
+    g.fillStyle(0xd8ffe4, 1).fillRect(-32, -1, 64, 2);
+  });
+  bake(scene, 'beam-large', 64, 18, (g) => {
+    g.fillStyle(0x4fd8ff, 0.2).fillRect(-32, -8, 64, 16);
+    g.fillStyle(0x7fe6ff, 0.55).fillRect(-32, -4.5, 64, 9);
+    g.fillStyle(0xffffff, 1).fillRect(-32, -1.75, 64, 3.5);
+  });
+  // Lightning: a few jagged variants, picked at random per arc.
+  for (let v = 0; v < 3; v++) {
+    bake(scene, `arc-${v}`, 64, 16, (g) => {
+      const pts: [number, number][] = [[-32, 0]];
+      for (let i = 1; i < 8; i++) pts.push([-32 + i * 8, Math.sin(i * 2.7 + v * 1.9) * 5 + Math.cos(i * 1.3 + v) * 2]);
+      pts.push([32, 0]);
+      for (const [w, a, c] of [[8, 0.2, 0x7fa8ff], [4, 0.45, 0xa8c8ff], [1.8, 1, 0xf6f9ff]] as const) {
+        g.lineStyle(w, c, a);
+        g.beginPath();
+        g.moveTo(pts[0][0], pts[0][1]);
+        for (const p of pts) g.lineTo(p[0], p[1]);
+        g.strokePath();
+      }
+    });
+  }
+  bake(scene, 'heavy-shell', 26, 10, (g) => {
+    g.fillStyle(0xffb347).fillRoundedRect(-11, -4, 22, 8, 4);
+    g.fillStyle(0xffffff).fillRoundedRect(1, -2, 9, 4, 2);
+  });
+  bake(scene, 'heavy-shell-enemy', 26, 10, (g) => {
+    g.fillStyle(0xff6a55).fillRoundedRect(-11, -4, 22, 8, 4);
+    g.fillStyle(0xffd0c8).fillRoundedRect(1, -2, 9, 4, 2);
+  });
+  bake(scene, 'plasma', 24, 24, (g) => {
+    g.fillStyle(0x9a7bff, 0.25).fillCircle(0, 0, 11);
+    g.fillStyle(0xc4a8ff, 0.6).fillCircle(0, 0, 7);
+    g.fillStyle(0xffffff, 1).fillCircle(0, 0, 3.5);
+  });
+  bake(scene, 'plasma-enemy', 24, 24, (g) => {
+    g.fillStyle(0xff5ab4, 0.25).fillCircle(0, 0, 11);
+    g.fillStyle(0xff9ad0, 0.6).fillCircle(0, 0, 7);
+    g.fillStyle(0xffffff, 1).fillCircle(0, 0, 3.5);
+  });
   // Point defense tracer: same length as the beam texture so the same code stretches it.
   bake(scene, 'pd-tracer', 64, 6, (g) => {
     g.fillStyle(0xffe08a, 0.9).fillRect(-32, -0.75, 64, 1.5);

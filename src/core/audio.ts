@@ -6,14 +6,14 @@
  */
 import { settings, saveSettings } from './settings';
 
-export type SoundId = 'mg' | 'cannon' | 'laser' | 'missile' | 'flare' | 'shield' | 'lock' | 'crunch' | 'collapse' | 'hit' | 'explode' | 'bigExplode' | 'warn' | 'ui';
+export type SoundId = 'mg' | 'cannon' | 'heavy' | 'laser' | 'pulse' | 'beam' | 'plasma' | 'zap' | 'missile' | 'flare' | 'shield' | 'lock' | 'crunch' | 'collapse' | 'hit' | 'explode' | 'bigExplode' | 'warn' | 'ui';
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let noise: AudioBuffer | null = null;
 /** Last play time per sound, to stop rapid-fire weapons stacking into noise. */
 const last: Partial<Record<SoundId, number>> = {};
-const MIN_GAP: Partial<Record<SoundId, number>> = { mg: 0.045, hit: 0.05, cannon: 0.04, warn: 0.3, missile: 0.08, lock: 0.25, crunch: 0.06, collapse: 0.15 };
+const MIN_GAP: Partial<Record<SoundId, number>> = { mg: 0.045, hit: 0.05, cannon: 0.04, warn: 0.3, missile: 0.08, lock: 0.25, crunch: 0.06, collapse: 0.15, beam: 0.1, pulse: 0.06, zap: 0.08 };
 
 function init(): void {
   if (ctx) return;
@@ -58,6 +58,26 @@ export function play(id: SoundId, volume = 1): void {
     case 'cannon':
       burst(now, 0.16, 900, 'lowpass', 0.6 * v);
       tone(now, 'sine', 140, 50, 0.14, 0.5 * v);
+      break;
+    case 'heavy':
+      burst(now, 0.3, 600, 'lowpass', 0.85 * v);
+      tone(now, 'sine', 110, 35, 0.28, 0.7 * v);
+      break;
+    case 'pulse':
+      tone(now, 'square', 1800, 900, 0.07, 0.07 * v);
+      break;
+    case 'beam':
+      // Re-triggered every 0.1 s while a beam is held, overlapping into a hum.
+      tone(now, 'sawtooth', 190, 180, 0.13, 0.05 * v);
+      tone(now, 'sine', 920, 900, 0.13, 0.04 * v);
+      break;
+    case 'plasma':
+      tone(now, 'sine', 300, 900, 0.25, 0.2 * v);
+      burst(now, 0.2, 1600, 'bandpass', 0.2 * v, 1.5);
+      break;
+    case 'zap':
+      burst(now, 0.14, 5000, 'highpass', 0.35 * v);
+      tone(now, 'square', 2400, 300, 0.1, 0.06 * v);
       break;
     case 'laser':
       tone(now, 'sawtooth', 1400, 260, 0.18, 0.18 * v);

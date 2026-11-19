@@ -4,9 +4,9 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 
 ## Current milestone
 
-**Milestone 7 part 2 — Field stations, swap stations, interact: built, awaiting the user's
-playtest.** M1–M7 part 1 signed off. Next by plan: 8 (enemies and weapons: drones, enemy
-mechs, the rest of the weapons incl. continuous-beam lasers).
+**Milestone 8 part 1 — The rest of the weapons: built, awaiting the user's playtest.** M1–M7
+signed off. Next: M8 part 2 (drones and enemy mechs that use the player's systems), then 9
+(factions).
 Deferred by the user: line-of-sight shadow rendering (logic already hides enemies behind
 walls); revisit as a graphics option, likely in M11.
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
@@ -22,6 +22,11 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   belong with M7 (multiple chassis, interact action). See `docs/PLAN.md`.
 - **One backup per mission** (user decision after M7 part 1): `ECONOMY.maxBackups = 1`; choosing
   another backup replaces the current one.
+- **Field services are expensive on purpose** (after M7 part 2): 3× hangar prices and a ¢16k swap
+  fee, so spending mid-mission is a real trade-off against the payout. Tune from there.
+- **Map sizes** (requested after M7 part 2): some maps should be bigger. Planned with mission
+  types (M10); watch performance (nav grid and obstacle count grow with area).
+- Weapons don't need to knock buildings down faster; heavier weapons (heavy cannon, plasma) do it.
 - **Chassis feel:** heavier chassis get lower turn rates and more momentum (lower accel/decel),
   lights turn and accelerate quicker. The movement numbers in `chassis.ts` are enough to make
   chassis feel distinct (user-approved, M2).
@@ -227,11 +232,28 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
 - Interact: F on PC (`actions.interact`); on phones a USE button appears next to the right stick
   only while standing on a station (`touchButtons.interact.visible`). HUD prompt shows the offer
   and price; cyan edge arrows point to unused stations.
-- Services are one use per station, priced at `ECONOMY.field.markup` (1.5×) hangar prices, paid
+- Services are one use per station, priced at `ECONOMY.field.markup` (3×) hangar prices, paid
   from the money you had at deploy (`MissionConfig.funds`, `fieldPrices`); spending comes back in
   `MissionOutcome.fieldCosts` and shows as debrief lines. Ammo: full refill. Repair: restores
-  every section that isn't destroyed. Swap (fee 8k): the current mech is airlifted home as it is
+  every section that isn't destroyed. Swap (fee 16k): the current mech is airlifted home as it is
   (`PlayerMech.airlift`) and the backup lands on the pad.
+
+## Weapon notes (M8 part 1)
+
+- Deliveries (`WeaponDef.delivery`): projectile, beam (instant pulse), stream (continuous beam
+  while held: `damage` and `heat` are per second; `Combat.stream()` every frame), arc (lightning:
+  nearest enemy in a cone with a clear line, then chains to unhit enemies nearby at
+  `chainFalloff`), missile.
+- New: Gatling (`spinUp`: starts at a quarter rate), heavy cannon (big shell with splash, good
+  against buildings), pulse laser, large laser, beam laser, heavy beam laser, plasma launcher
+  (slow bolt, `splashOnHit`), lightning projector. Assault reactor (31 power) for energy-heavy
+  heavies. Stock loadouts unchanged.
+- Stats: a stream counts a shot every half second held (and a hit if it lands then); lightning
+  chains, splash and most stream frames don't count as hits (`onUnitHit(..., counts)`).
+- Pools: beams 24 (pulses, arcs, PD tracers), streams 12 (shown only on frames they fire).
+  Measured ~0.4–0.5 ms/frame logic with Gatling, heavy cannon, beam, lightning and plasma firing.
+- Weapons still fire parallel from their hardpoints. Wide mounts (Roc arms at ±40) can pass
+  either side of a small target dead ahead; revisit if it bothers the user.
 
 ## Conventions
 

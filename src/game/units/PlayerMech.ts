@@ -22,6 +22,10 @@ export interface MountedWeapon {
   cooldown: number;
   /** The arm it was mounted on was destroyed. */
   destroyed: boolean;
+  /** Spin-up weapons: 0..1 of the way to full fire rate. */
+  spin: number;
+  /** Continuous beams: seconds held, for counting hits in half-second ticks. */
+  held: number;
 }
 
 const NO_INPUT: Vec = { x: 0, y: 0 };
@@ -102,6 +106,8 @@ export class PlayerMech implements Unit {
       group: w.group,
       cooldown: 0,
       destroyed: false,
+      spin: 0,
+      held: 0,
     }));
     for (const side of ['leftArm', 'rightArm'] as const) {
       if (this.sections.destroyed(side)) {
@@ -182,8 +188,23 @@ export class PlayerMech implements Unit {
 
     for (const w of this.weapons) {
       w.cooldown = Math.max(0, w.cooldown - dt);
-      const held = w.group === 1 ? input.fire1 : input.fire2;
-      if (!held || !running || w.cooldown > 0 || w.destroyed) continue;
+      const held = (w.group === 1 ? input.fire1 : input.fire2) && running && !w.destroyed;
+      if (w.def.spinUp) w.spin = Math.max(0, Math.min(1, w.spin + (held ? dt : -dt * 1.5) / w.def.spinUp));
+      if (w.def.delivery === 'stream') {
+        if (!held) {
+          w.held = 0;
+          continue;
+        }
+        // A tick every half second held counts as a shot (and a hit, if it lands).
+        const tick = Math.floor((w.held + dt) / 0.5) > Math.floor(w.held / 0.5) || w.held === 0;
+        w.held += dt;
+        if (tick) this.stats.shots++;
+        const { x, y } = this.muzzle(w);
+        combat.stream(x, y, this.motor.torsoAngle, w.def, 'player', dt, 1, tick);
+        this.heat += w.def.heat * dt;
+        continue;
+      }
+      if (!held || w.cooldown > 0) continue;
       const pool = w.def.family === 'missile' ? 'missile' : 'ballistic';
       if (w.def.ammoPerShot > 0 && this.ammo[pool] < w.def.ammoPerShot) continue;
       this.fireWeapon(w, combat, input.lock);
@@ -193,7 +214,8 @@ export class PlayerMech implements Unit {
       }
       this.heat += w.def.heat;
       this.stats.shots++;
-      w.cooldown = 1 / w.def.fireRate;
+      // Spin-up weapons start at a quarter of their full rate.
+      w.cooldown = 1 / (w.def.fireRate * (w.def.spinUp ? 0.25 + 0.75 * w.spin : 1));
     }
 
     this.updateEquipment(dt, input, running, combat);
@@ -349,12 +371,16 @@ export class PlayerMech implements Unit {
     this.motor.turnFactor = f.turn;
   }
 
-  private fireWeapon(w: MountedWeapon, combat: Combat, lock: Unit | null): void {
+  /** World position of a weapon's muzzle (its hardpoint, turned with the torso). */
+  private muzzle(w: MountedWeapon): Vec {
     const m = this.motor;
     const ca = Math.cos(m.torsoAngle);
     const sa = Math.sin(m.torsoAngle);
-    const mx = m.pos.x + w.mount.x * ca - w.mount.y * sa;
-    const my = m.pos.y + w.mount.x * sa + w.mount.y * ca;
-    combat.fire(mx, my, m.torsoAngle, w.def, 'player', 1, 1, 0, lock);
+    return { x: m.pos.x + w.mount.x * ca - w.mount.y * sa, y: m.pos.y + w.mount.x * sa + w.mount.y * ca };
+  }
+
+  private fireWeapon(w: MountedWeapon, combat: Combat, lock: Unit | null): void {
+    const { x, y } = this.muzzle(w);
+    combat.fire(x, y, this.motor.torsoAngle, w.def, 'player', 1, 1, 0, lock);
   }
 }

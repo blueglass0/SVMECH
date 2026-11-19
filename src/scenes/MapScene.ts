@@ -168,7 +168,7 @@ export class MapScene extends Phaser.Scene {
     this.units = [this.player, ...this.enemies];
     this.rebuildBodies();
     this.combat = new Combat(this, this.world, this.units, this.fx);
-    this.combat.onUnitHit = (u, team, dmg) => this.onUnitHit(u, team, dmg);
+    this.combat.onUnitHit = (u, team, dmg, counts) => this.onUnitHit(u, team, dmg, counts);
     this.ai = { player: this.player, world: this.world, nav, combat: this.combat, fx: this.fx, bodies: this.bodies, difficulty };
     this.controls = new InputSystem(this);
     this.visionTimer = 0;
@@ -480,15 +480,15 @@ export class MapScene extends Phaser.Scene {
     }
   }
 
-  private onUnitHit(u: Unit, team: 'player' | 'enemy', dmg: number): void {
+  private onUnitHit(u: Unit, team: 'player' | 'enemy', dmg: number, counts: boolean): void {
     if (team === 'player') {
-      this.hits++;
+      if (counts) this.hits++;
       this.damageDealt += dmg;
       // Shooting something brings its neighbours.
       for (const e of this.enemies) {
         if (e.alive && Math.hypot(e.x - u.x, e.y - u.y) < ALERT_RADIUS) e.alert(this.player);
       }
-    } else if (u === this.player) {
+    } else if (u === this.player && (counts || dmg >= 2)) {
       hud.lastHit = this.player.lastHit;
       // Direction marker: newest first, capped.
       hud.hitMarkers.unshift({ angle: this.player.lastHitAngle, time: this.player.lastHit });
@@ -796,7 +796,7 @@ export class MapScene extends Phaser.Scene {
         status.empty = true;
         continue;
       }
-      status.ready = Math.min(...ws.map((w) => 1 - w.cooldown * w.def.fireRate));
+      status.ready = Math.max(0, Math.min(...ws.map((w) => (w.def.delivery === 'stream' ? 1 : 1 - w.cooldown * w.def.fireRate))));
       status.empty = ws.every((w) => w.def.ammoPerShot > 0 && p.ammo.ballistic < w.def.ammoPerShot);
     }
     const v = cam.worldView;

@@ -11,17 +11,23 @@ export interface WeaponDef {
   /** Short label for the HUD. */
   short: string;
   family: HardpointType;
-  /** Projectiles fly and can miss; beams hit instantly along a line; missiles are objects that can be shot down. */
-  delivery: 'projectile' | 'beam' | 'missile';
+  /**
+   * projectile: flies and can miss. beam: a pulse that hits instantly along a line.
+   * stream: a continuous beam while the trigger is held (`damage` and `heat` are per
+   * second, `fireRate` is unused). arc: lightning that jumps to the nearest enemy in
+   * front, then chains to others nearby. missile: objects that can be shot down.
+   */
+  delivery: 'projectile' | 'beam' | 'stream' | 'arc' | 'missile';
+  /** Per shot (per second for streams). */
   damage: number;
-  /** Shots per second. */
+  /** Shots per second (at full spin for spin-up weapons). */
   fireRate: number;
   range: number;
   /** Projectile speed, units/s (projectiles only). */
   projectileSpeed: number;
   /** Random spread either side of the aim line, degrees. */
   spread: number;
-  /** Heat added per shot. */
+  /** Heat added per shot (per second for streams). */
   heat: number;
   /** Ammo units used per shot from the family's shared pool (0 = none). */
   ammoPerShot: number;
@@ -29,12 +35,19 @@ export interface WeaponDef {
   tonnage: number;
   price: number;
   /** Visual and sound style. */
-  look: 'bullet' | 'shell' | 'laser' | 'missile' | 'rocket';
+  look: 'bullet' | 'shell' | 'heavyShell' | 'plasma' | 'laser' | 'pulse' | 'largeLaser' | 'missile' | 'rocket' | 'lightning';
   /**
    * Shells that burst on the ground where they were aimed (if they don't hit
    * something first), damaging anything within `radius`: mech legs, mostly.
+   * Explosions also wreck buildings (see `splashMultiplier` in data/terrain.ts).
    */
   splash?: { radius: number; damage: number };
+  /** The splash also goes off on a direct hit (plasma), hurting anything else nearby. */
+  splashOnHit?: boolean;
+  /** Seconds to reach full fire rate while held (Gatling); it starts at a quarter. */
+  spinUp?: number;
+  /** Lightning: half-angle of the cone it looks for a target in, and how it chains. */
+  arc?: { coneDeg: number; chains: number; chainRange: number; chainFalloff: number };
   /** Missiles and rockets: one shot fires a salvo. */
   missile?: {
     salvo: number;
@@ -161,6 +174,157 @@ export const WEAPONS: Record<string, WeaponDef> = {
     look: 'rocket',
     splash: { radius: 40, damage: 5 },
     missile: { salvo: 6, fan: 3, turnRate: 0, hp: 2 },
+  },
+
+  // --- Milestone 8 additions ---
+  gatling: {
+    id: 'gatling',
+    name: 'Gatling gun',
+    short: 'GAT',
+    family: 'ballistic',
+    delivery: 'projectile',
+    damage: 4,
+    fireRate: 14,
+    range: 450,
+    projectileSpeed: 1100,
+    spread: 4.5,
+    heat: 0.22,
+    ammoPerShot: 1,
+    power: 2,
+    tonnage: 7,
+    price: 34000,
+    look: 'bullet',
+    spinUp: 0.8,
+  },
+  heavyCannon: {
+    id: 'heavyCannon',
+    name: 'Heavy cannon',
+    short: 'H.CN',
+    family: 'ballistic',
+    delivery: 'projectile',
+    damage: 75,
+    fireRate: 0.5,
+    range: 720,
+    projectileSpeed: 700,
+    spread: 0.8,
+    heat: 4,
+    ammoPerShot: 12,
+    power: 3,
+    tonnage: 10,
+    price: 58000,
+    look: 'heavyShell',
+    splash: { radius: 50, damage: 22 },
+  },
+  pulseLaser: {
+    id: 'pulseLaser',
+    name: 'Pulse laser',
+    short: 'PULSE',
+    family: 'energy',
+    delivery: 'beam',
+    damage: 8,
+    fireRate: 3.5,
+    range: 400,
+    projectileSpeed: 0,
+    spread: 1,
+    heat: 2.4,
+    ammoPerShot: 0,
+    power: 6,
+    tonnage: 2,
+    price: 18000,
+    look: 'pulse',
+  },
+  largeLaser: {
+    id: 'largeLaser',
+    name: 'Large laser',
+    short: 'L.LASER',
+    family: 'energy',
+    delivery: 'beam',
+    damage: 75,
+    fireRate: 0.5,
+    range: 760,
+    projectileSpeed: 0,
+    spread: 0,
+    heat: 32,
+    ammoPerShot: 0,
+    power: 15,
+    tonnage: 7,
+    price: 52000,
+    look: 'largeLaser',
+  },
+  beamLaser: {
+    id: 'beamLaser',
+    name: 'Beam laser',
+    short: 'BEAM',
+    family: 'energy',
+    delivery: 'stream',
+    damage: 34,
+    fireRate: 0,
+    range: 520,
+    projectileSpeed: 0,
+    spread: 0,
+    heat: 14,
+    ammoPerShot: 0,
+    power: 10,
+    tonnage: 4,
+    price: 34000,
+    look: 'laser',
+  },
+  heavyBeamLaser: {
+    id: 'heavyBeamLaser',
+    name: 'Heavy beam laser',
+    short: 'H.BEAM',
+    family: 'energy',
+    delivery: 'stream',
+    damage: 58,
+    fireRate: 0,
+    range: 600,
+    projectileSpeed: 0,
+    spread: 0,
+    heat: 25,
+    ammoPerShot: 0,
+    power: 16,
+    tonnage: 8,
+    price: 70000,
+    look: 'largeLaser',
+  },
+  plasma: {
+    id: 'plasma',
+    name: 'Plasma launcher',
+    short: 'PLASMA',
+    family: 'energy',
+    delivery: 'projectile',
+    damage: 55,
+    fireRate: 0.6,
+    range: 560,
+    projectileSpeed: 430,
+    spread: 1,
+    heat: 20,
+    ammoPerShot: 0,
+    power: 11,
+    tonnage: 6,
+    price: 48000,
+    look: 'plasma',
+    splash: { radius: 60, damage: 26 },
+    splashOnHit: true,
+  },
+  lightning: {
+    id: 'lightning',
+    name: 'Lightning projector',
+    short: 'ARC',
+    family: 'energy',
+    delivery: 'arc',
+    damage: 24,
+    fireRate: 1.4,
+    range: 300,
+    projectileSpeed: 0,
+    spread: 0,
+    heat: 9,
+    ammoPerShot: 0,
+    power: 10,
+    tonnage: 4,
+    price: 42000,
+    look: 'lightning',
+    arc: { coneDeg: 30, chains: 2, chainRange: 170, chainFalloff: 0.5 },
   },
 
   // --- Enemy weapons ---
