@@ -852,9 +852,18 @@ function weaponStats(w: WeaponDef): string {
   if (w.missile) {
     return `${w.missile.salvo}× ${w.damage} dmg every ${Math.round(10 / w.fireRate) / 10}s · ${w.missile.turnRate > 0 ? 'seeking' : 'unguided'} · range ${w.range} · ${w.tonnage} t · power ${w.power} · ${w.ammoPerShot} missiles/salvo`;
   }
-  const dps = Math.round(w.damage * w.fireRate);
+  const stream = w.delivery === 'stream';
+  const dps = Math.round(stream ? w.damage : w.damage * w.fireRate);
+  const heat = Math.round((stream ? w.heat : w.heat * w.fireRate) * 10) / 10;
   const ammo = w.ammoPerShot > 0 ? ` · ammo ${w.ammoPerShot}/shot` : ' · no ammo';
-  return `${dps} dps · range ${w.range} · heat ${Math.round(w.heat * w.fireRate * 10) / 10}/s · ${w.tonnage} t · power ${w.power}${ammo}`;
+  const notes: string[] = [];
+  if (stream) notes.push('continuous beam while held');
+  else if (w.fireRate <= 1) notes.push(`${w.damage} per hit`);
+  if (w.spinUp) notes.push(`spins up over ${w.spinUp}s`);
+  if (w.splash) notes.push(`splash ${w.splash.damage} in ${w.splash.radius}`);
+  if (w.arc) notes.push(`auto-targets within ${w.arc.coneDeg}°, chains to ${w.arc.chains} more`);
+  if (w.look === 'pulse') notes.push('rapid pulses');
+  return `${dps} dps · range ${w.range} · heat ${heat}/s · ${w.tonnage} t · power ${w.power}${ammo}${notes.length ? ' · ' + notes.join(' · ') : ''}`;
 }
 
 function cap(s: string): string {

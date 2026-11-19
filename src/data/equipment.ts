@@ -73,6 +73,17 @@ export const EQUIPMENT: Record<string, EquipmentDef> = {
     output: 23,
     passiveHeat: 2.5,
   },
+  assaultReactor: {
+    id: 'assaultReactor',
+    name: 'Assault reactor',
+    kind: 'reactor',
+    slots: 4,
+    tonnage: 13,
+    power: 0,
+    price: 190000,
+    output: 31,
+    passiveHeat: 4,
+  },
   heatSink: {
     id: 'heatSink',
     name: 'Heat sink',

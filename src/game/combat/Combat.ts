@@ -22,17 +22,27 @@ interface Shot {
   big: boolean;
   splashRadius: number;
   splashDamage: number;
+  splashOnHit: boolean;
   img: Phaser.GameObjects.Image;
 }
 
 interface Beam {
   img: Phaser.GameObjects.Image;
   life: number;
+  max: number;
+}
+
+/** A continuous beam's sprite, shown for the frames it is fired in. */
+interface Stream {
+  img: Phaser.GameObjects.Image;
+  frame: number;
 }
 
 const SHOT_POOL = 240;
-const BEAM_POOL = 8;
+const BEAM_POOL = 24;
+const STREAM_POOL = 12;
 const BEAM_LIFE = 0.12;
+const ARC_LIFE = 0.2;
 const BEAM_TEX_LENGTH = 64;
 
 /**
@@ -44,11 +54,20 @@ export class Combat {
   private shots: Shot[] = [];
   private beams: Beam[] = [];
   private nextBeam = 0;
+  private streams: Stream[] = [];
+  /** Counts combat updates; streams fired since the last update carry the current number. */
+  private frame = 0;
+  /** Scratch list for lightning targets (no per-shot allocation). */
+  private arcHits: Unit[] = [];
   /** Where the listener is, for distance-based volume. */
   listenerX = 0;
   listenerY = 0;
-  /** Called when a shot or beam hits a unit (stats, alerts). */
-  onUnitHit?: (unit: Unit, team: Team, damage: number) => void;
+  /**
+   * Called when a shot or beam hits a unit (stats, alerts). `counts` is false for
+   * damage that shouldn't count as a separate hit (most frames of a continuous beam,
+   * lightning chains, splash).
+   */
+  onUnitHit?: (unit: Unit, team: Team, damage: number, counts: boolean) => void;
 
   readonly missiles: Missiles;
 
@@ -79,8 +98,13 @@ export class Combat {
         big: false,
         splashRadius: 0,
         splashDamage: 0,
+        splashOnHit: false,
         img,
       });
+    }
+    for (let i = 0; i < STREAM_POOL; i++) {
+      const img = scene.add.image(0, 0, 'beam').setOrigin(0, 0.5).setVisible(false).setDepth(8).setBlendMode(Phaser.BlendModes.ADD);
+      this.streams.push({ img, frame: -1 });
     }
     for (let i = 0; i < BEAM_POOL; i++) {
       const img = scene.add
@@ -89,7 +113,7 @@ export class Combat {
         .setVisible(false)
         .setDepth(8)
         .setBlendMode(Phaser.BlendModes.ADD);
-      this.beams.push({ img, life: 0 });
+      this.beams.push({ img, life: 0, max: BEAM_LIFE });
     }
   }
 
@@ -117,13 +141,20 @@ export class Combat {
       return;
     }
     if (w.delivery === 'beam') {
-      this.fireBeam(x, y, a, w.range, damage, team);
-      play('laser', volume);
+      const tex = w.look === 'pulse' ? 'beam-pulse' : w.look === 'largeLaser' ? 'beam-large' : 'beam';
+      this.fireBeam(x, y, a, w.range, damage, team, tex);
+      play(w.look === 'pulse' ? 'pulse' : 'laser', volume * (w.look === 'largeLaser' ? 1.3 : 1));
       return;
     }
+    if (w.delivery === 'arc') {
+      this.fireArc(x, y, angle, w, team, damageMult);
+      play('zap', volume);
+      return;
+    }
+    if (w.delivery === 'stream') return; // streams fire through stream(), every frame
     const shot = this.shots.find((s) => !s.active);
     if (!shot) return;
-    const big = w.look === 'shell';
+    const big = w.look !== 'bullet';
     shot.active = true;
     shot.x = x;
     shot.y = y;
@@ -133,15 +164,124 @@ export class Combat {
     shot.range = w.range;
     shot.splashRadius = w.splash?.radius ?? 0;
     shot.splashDamage = (w.splash?.damage ?? 0) * damageMult;
+    shot.splashOnHit = !!w.splashOnHit;
     // Splash shells burst a little short of or past the aim point.
     if (shot.splashRadius > 0 && aimDistance > 0) shot.range = Math.min(w.range, aimDistance * (0.92 + Math.random() * 0.16));
     shot.damage = damage;
     shot.team = team;
     shot.big = big;
-    const tex = (big ? 'shell' : 'bullet') + (team === 'enemy' ? '-enemy' : '');
-    shot.img.setTexture(tex).setPosition(x, y).setRotation(a).setVisible(true);
-    this.fx.muzzle(x, y, a, big ? 0.8 : 0.45);
-    play((big ? 'cannon' : 'mg') as SoundId, volume);
+    const base = w.look === 'heavyShell' ? 'heavy-shell' : w.look === 'plasma' ? 'plasma' : big ? 'shell' : 'bullet';
+    shot.img.setTexture(base + (team === 'enemy' ? '-enemy' : '')).setPosition(x, y).setRotation(a).setVisible(true);
+    this.fx.muzzle(x, y, a, w.look === 'heavyShell' ? 1.2 : big ? 0.8 : 0.45);
+    const sound: SoundId = w.look === 'heavyShell' ? 'heavy' : w.look === 'plasma' ? 'plasma' : big ? 'cannon' : 'mg';
+    play(sound, volume);
+  }
+
+  /**
+   * One frame of a continuous beam: damage and terrain burn scale with `dt`.
+   * `tick` marks the frames that count as a hit for stats (the weapon sends one
+   * every half second it is held).
+   */
+  stream(x: number, y: number, a: number, w: WeaponDef, team: Team, dt: number, damageMult = 1, tick = false): void {
+    const ex = x + Math.cos(a) * w.range;
+    const ey = y + Math.sin(a) * w.range;
+    let t = this.world.raycast(x, y, ex, ey);
+    const wall = this.world.lastHit;
+    let hitUnit: Unit | null = null;
+    for (const u of this.units) {
+      if (!u.alive || u.team === team) continue;
+      const ut = segmentCircle(x, y, ex, ey, u.x, u.y, u.radius);
+      if (ut >= 0 && (t < 0 || ut < t)) {
+        t = ut;
+        hitUnit = u;
+      }
+    }
+    const damage = w.damage * damageMult * dt;
+    const m = this.missileOnLine(x, y, ex, ey, team, t);
+    let len: number;
+    if (m) {
+      len = Math.hypot(m.x - x, m.y - y);
+      this.missiles.damage(m, 6 * dt);
+    } else {
+      len = (t >= 0 ? t : 1) * w.range;
+      const hx = x + Math.cos(a) * len;
+      const hy = y + Math.sin(a) * len;
+      if (hitUnit) this.damage(hitUnit, damage, x, y, team, hx, hy, tick);
+      else if (wall >= 0) this.world.damage(wall, damage);
+      if (t >= 0 && Math.random() < dt * 20) this.fx.impact(hx, hy, a, 1);
+    }
+    const s = this.streams.find((st) => st.frame !== this.frame);
+    if (s) {
+      s.frame = this.frame;
+      s.img
+        .setTexture(w.look === 'largeLaser' ? 'beam-large' : 'beam')
+        .setPosition(x, y)
+        .setRotation(a)
+        .setScale(len / (BEAM_TEX_LENGTH * ART_SCALE), (0.8 + Math.random() * 0.25) / ART_SCALE)
+        .setAlpha(0.8 + Math.random() * 0.2)
+        .setVisible(true);
+    }
+    play('beam', this.volumeAt(x, y) * (team === 'player' ? 1 : 0.7));
+  }
+
+  /**
+   * Lightning: strikes the nearest enemy within the cone in front (needs a clear
+   * line), then jumps to the nearest unhit enemies within chain range, weaker each time.
+   * With nothing to hit, it crackles out a short way.
+   */
+  private fireArc(x: number, y: number, angle: number, w: WeaponDef, team: Team, damageMult: number): void {
+    const arc = w.arc!;
+    const hits = this.arcHits;
+    hits.length = 0;
+    let best: Unit | null = null;
+    let bestD = Infinity;
+    for (const u of this.units) {
+      if (!u.alive || u.team === team) continue;
+      const d = Math.hypot(u.x - x, u.y - y) - u.radius;
+      if (d > w.range || d >= bestD) continue;
+      const off = Math.abs(Math.atan2(Math.sin(Math.atan2(u.y - y, u.x - x) - angle), Math.cos(Math.atan2(u.y - y, u.x - x) - angle)));
+      if (off > arc.coneDeg * DEG) continue;
+      if (this.world.raycast(x, y, u.x, u.y) >= 0) continue;
+      best = u;
+      bestD = d;
+    }
+    this.fx.muzzle(x, y, angle, 0.6);
+    if (!best) {
+      const len = w.range * (0.35 + Math.random() * 0.2);
+      const a = angle + (Math.random() - 0.5) * 0.5;
+      const t = this.world.raycast(x, y, x + Math.cos(a) * len, y + Math.sin(a) * len);
+      this.showBeam(x, y, a, (t >= 0 ? t : 1) * len, `arc-${Math.floor(Math.random() * 3)}`, ARC_LIFE);
+      return;
+    }
+    let fromX = x;
+    let fromY = y;
+    let damage = w.damage * damageMult;
+    let target: Unit | null = best;
+    for (let i = 0; i <= arc.chains && target; i++) {
+      hits.push(target);
+      const a = Math.atan2(target.y - fromY, target.x - fromX);
+      const len = Math.max(0, Math.hypot(target.x - fromX, target.y - fromY) - target.radius * 0.5);
+      const hx = fromX + Math.cos(a) * len;
+      const hy = fromY + Math.sin(a) * len;
+      this.showBeam(fromX, fromY, a, len, `arc-${Math.floor(Math.random() * 3)}`, ARC_LIFE);
+      this.damage(target, damage, fromX, fromY, team, hx, hy, i === 0);
+      this.fx.impact(hx, hy, a, 3);
+      // Next: the nearest enemy to this one that hasn't been hit yet.
+      fromX = target.x;
+      fromY = target.y;
+      damage *= arc.chainFalloff;
+      let next: Unit | null = null;
+      let nextD = arc.chainRange;
+      for (const u of this.units) {
+        if (!u.alive || u.team === team || hits.includes(u)) continue;
+        const d = Math.hypot(u.x - fromX, u.y - fromY) - u.radius;
+        if (d < nextD && this.world.raycast(fromX, fromY, u.x, u.y) < 0) {
+          next = u;
+          nextD = d;
+        }
+      }
+      target = next;
+    }
   }
 
   update(dt: number): void {
@@ -174,7 +314,7 @@ export class Combat {
         this.fx.impact(hx, hy, angle, s.big ? 6 : 2);
         if (hitUnit) this.damage(hitUnit, s.damage, s.x, s.y, s.team, hx, hy);
         else if (wall >= 0) this.world.damage(wall, s.damage);
-        if (!hitUnit && s.splashRadius > 0) this.burst(hx, hy, s.splashRadius, s.splashDamage, s.team, null);
+        if (s.splashRadius > 0 && (!hitUnit || s.splashOnHit)) this.burst(hx, hy, s.splashRadius, s.splashDamage, s.team, hitUnit);
         if (s.big) play('hit', this.volumeAt(hx, hy) * 0.8);
         this.kill(s);
         continue;
@@ -190,11 +330,13 @@ export class Combat {
       s.img.setPosition(nx, ny);
     }
     this.missiles.update(dt);
+    for (const st of this.streams) if (st.frame !== this.frame && st.img.visible) st.img.setVisible(false);
+    this.frame++;
     for (const b of this.beams) {
       if (b.life <= 0) continue;
       b.life -= dt;
       if (b.life <= 0) b.img.setVisible(false);
-      else b.img.setAlpha(b.life / BEAM_LIFE);
+      else b.img.setAlpha(b.life / b.max);
     }
   }
 
@@ -206,9 +348,13 @@ export class Combat {
       b.life = 0;
       b.img.setVisible(false);
     }
+    for (const st of this.streams) {
+      st.frame = -1;
+      st.img.setVisible(false);
+    }
   }
 
-  private fireBeam(x: number, y: number, a: number, range: number, damage: number, team: Team): void {
+  private fireBeam(x: number, y: number, a: number, range: number, damage: number, team: Team, texture: string): void {
     const ex = x + Math.cos(a) * range;
     const ey = y + Math.sin(a) * range;
     let t = this.world.raycast(x, y, ex, ey);
@@ -227,7 +373,7 @@ export class Combat {
       // The beam stops at the first missile in its way and burns it.
       const len = Math.hypot(m.x - x, m.y - y);
       this.missiles.damage(m, 2);
-      this.showBeam(x, y, a, len, 'beam');
+      this.showBeam(x, y, a, len, texture);
       return;
     }
     const len = (t >= 0 ? t : 1) * range;
@@ -236,7 +382,7 @@ export class Combat {
     if (hitUnit) this.damage(hitUnit, damage, x, y, team, hx, hy);
     else if (wall >= 0) this.world.damage(wall, damage);
     if (t >= 0) this.fx.impact(hx, hy, a, 5);
-    this.showBeam(x, y, a, len, 'beam');
+    this.showBeam(x, y, a, len, texture);
     this.fx.muzzle(x, y, a, 0.5);
   }
 
@@ -270,10 +416,11 @@ export class Combat {
     return best;
   }
 
-  private showBeam(x: number, y: number, a: number, len: number, texture: string): void {
+  private showBeam(x: number, y: number, a: number, len: number, texture: string, life = BEAM_LIFE): void {
     const b = this.beams[this.nextBeam];
     this.nextBeam = (this.nextBeam + 1) % this.beams.length;
-    b.life = BEAM_LIFE;
+    b.life = life;
+    b.max = life;
     b.img
       .setTexture(texture)
       .setPosition(x, y)
@@ -283,9 +430,9 @@ export class Combat {
       .setVisible(true);
   }
 
-  private damage(u: Unit, amount: number, fromX: number, fromY: number, team: Team, hitX: number, hitY: number): void {
+  private damage(u: Unit, amount: number, fromX: number, fromY: number, team: Team, hitX: number, hitY: number, counts = true): void {
     u.takeDamage(amount, fromX, fromY, hitX, hitY);
-    this.onUnitHit?.(u, team, amount);
+    this.onUnitHit?.(u, team, amount, counts);
   }
 
   /** Ground burst: damage falls off with distance. Mechs take it in the legs. */
@@ -301,7 +448,7 @@ export class Combat {
       const amount = damage * (1 - Math.max(0, d) / radius);
       if (u.takeSplash) u.takeSplash(amount);
       else u.takeDamage(amount, x, y);
-      this.onUnitHit?.(u, team, amount);
+      this.onUnitHit?.(u, team, amount, false);
     }
     // Explosives are good at knocking down buildings.
     for (const i of this.world.obstaclesNear(x, y, radius)) {

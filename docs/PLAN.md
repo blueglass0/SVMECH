@@ -140,8 +140,10 @@ Milestones 1 to 5 are the prototype: a complete, playable loop with one mech, a 
 7. **Hangar and backups.** Also (added after M5): **contract tonnage limits** (some contracts cap mech weight, rewarding a varied hangar), and **field ammo and repair stations** that appear on some maps: walk onto one and pay to restore some ammo or repair sections mid-mission, using the same interact action as swap stations.
    - Original scope: Three or four buyable chassis, backup mechs with drop-in, and swap stations.
 8. **Enemies and weapons.** Drones, enemy mechs that use the player's systems, and the rest of the weapons: Gatling gun, heavy cannon, more lasers, plasma, and lightning. Laser variants include continuous-beam lasers (damage and heat per second while held) alongside pulse lasers, with different range and heat trade-offs.
+   - Built in two parts: weapons first, then drones and enemy mechs (which use the new weapons).
 9. **Factions.** Three factions with their colors and army styles, reputation, and reputation-gated shops.
 10. **More mission types.** Defend, escort, convoy raid, and mech hunt.
+   - Also (requested after M7): **different map sizes**, with some maps bigger, as long as performance holds.
 11. **Polish.** Difficulty settings menu, tutorial, sound pass, menu and phone UI pass, and a performance check on your phone. The phone UI pass should rethink the buttons around the right stick (weapon swap, two equipment actions, interact), which get crowded as features are added.
 12. **Optional final mission.** Maybe, someday.
 
@@ -172,7 +174,8 @@ This is a new game project. Read docs/PLAN.md: it's the full design and build pl
 - Phone weapon groups: the right stick fires the selected group; a button next to it switches between group 1 and 2. A smoother phone solution is still wanted later.
 - Aim assist on phones stays light.
 - One backup mech per mission: a single extra chance (after M7).
-- Field stations (ammo, repair, swap) are single-use per station and cost 1.5× hangar prices; field repair can't fix destroyed sections.
+- Field stations (ammo, repair, swap) are single-use per station; field repair can't fix destroyed sections. They cost 3× hangar prices (swap fee ¢16k) so spending mid-mission is a real trade-off against the payout (raised from 1.5× after M7).
+- Current weapons don't need to destroy buildings faster; heavier weapons (heavy cannon, plasma) are the building-wreckers.
 
 ## Open questions
 
