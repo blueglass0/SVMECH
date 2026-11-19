@@ -19,6 +19,7 @@ export const DESTROY_TARGETS = {
     forests: [3, 5],
     fences: [5, 9],
     sheds: [10, 18],
+    sandbags: [8, 14],
   },
   targets: 3,
   target: 'uplink',

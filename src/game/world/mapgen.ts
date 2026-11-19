@@ -113,7 +113,7 @@ export function generateDestroyTargets(seed: number, difficulty: CombatDifficult
       const y = rng.range(gap, H - gap);
       return rng.next() < 0.5
         ? { kind: 'circle', x, y, r: rng.range(25, 50), type: 'rock' }
-        : { kind: 'rect', x, y, w: rng.range(60, 140), h: rng.range(60, 100), type: 'building' };
+        : { kind: 'rect', x, y, w: rng.range(60, 140), h: rng.range(60, 100), type: 'lightBuilding' };
     });
   }
 
@@ -154,6 +154,18 @@ export function generateDestroyTargets(seed: number, difficulty: CombatDifficult
       if (rng.next() > 0.12) addProp({ kind: 'rect', x, y, w: along ? 46 : 8, h: along ? 8 : 46, type: 'fence' });
       if (along) x += 50;
       else y += 50;
+    }
+  }
+  // Sandbag barricades: medium mechs can't crush them, so they keep clear of other solids like
+  // the gap rule (checked against solids only), and stay out of the base clearings.
+  for (let n = rng.int(M.sandbags[0], M.sandbags[1]); n > 0; n--) {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const along = rng.next() < 0.5;
+      const o: Obstacle = { kind: 'rect', x: rng.range(gap, W - gap), y: rng.range(gap, H - gap), w: along ? 56 : 18, h: along ? 18 : 56, type: 'sandbags' };
+      if (keepClear(o)) {
+        obstacles.push(o);
+        break;
+      }
     }
   }
   for (let n = rng.int(M.sheds[0], M.sheds[1]); n > 0; n--) {
