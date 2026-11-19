@@ -6,6 +6,8 @@ import type { MechMotor } from './MechMotor';
 
 /** Torso art is drawn a little large; this keeps the feet visible around it. */
 const TORSO_SCALE = 0.85;
+/** Arm distance from the torso centre, in torso art units. */
+const ARM_OFFSET = 25;
 /** Distance from the mech centre to the leg heading marker. */
 const LEG_TICK_DISTANCE = 52;
 
@@ -15,6 +17,9 @@ export class MechView {
   private footR: Phaser.GameObjects.Image;
   private hips: Phaser.GameObjects.Image;
   private torso: Phaser.GameObjects.Image;
+  private armL: Phaser.GameObjects.Image;
+  private armR: Phaser.GameObjects.Image;
+  private debugArcs?: Phaser.GameObjects.Image;
   private chevron: Phaser.GameObjects.Image;
   private legTick: Phaser.GameObjects.Image;
   /** 0..1, how much the feet swing. Eases in and out so stopping looks planted. */
@@ -31,12 +36,32 @@ export class MechView {
     this.footR = scene.add.image(0, 0, 'mech-foot').setScale(s).setDepth(4);
     this.hips = scene.add.image(0, 0, 'mech-hips').setScale(s).setDepth(4);
     this.torso = scene.add.image(0, 0, 'mech-torso').setScale(s * TORSO_SCALE).setDepth(6);
+    this.armL = scene.add.image(0, 0, 'mech-arm').setScale(s * TORSO_SCALE).setDepth(6);
+    this.armR = scene.add.image(0, 0, 'mech-arm').setScale(s * TORSO_SCALE).setDepth(6);
     this.chevron = scene.add.image(0, 0, 'aim-chevron').setScale(s).setVisible(showAimMarker).setDepth(10);
   }
 
   /** Dim the mech (shutdown, destroyed). */
   setAlpha(a: number): void {
-    for (const img of [this.footL, this.footR, this.hips, this.torso]) img.setAlpha(a);
+    for (const img of [this.footL, this.footR, this.hips, this.torso, this.armL, this.armR]) img.setAlpha(a);
+  }
+
+  /** Swap an arm for a stump (destroyed) or restore it. */
+  setArm(side: 'leftArm' | 'rightArm', intact: boolean): void {
+    (side === 'leftArm' ? this.armL : this.armR).setTexture(intact ? 'mech-arm' : 'mech-arm-stub');
+  }
+
+  /** Debug: show the hit arcs around the mech. */
+  showHitArcs(scene: Phaser.Scene): void {
+    this.debugArcs = scene.add.image(0, 0, 'debug-arcs').setScale(1 / ART_SCALE).setDepth(3);
+  }
+
+  /** World position of an arm (for smoke and explosions). */
+  armPosition(side: 'leftArm' | 'rightArm', out: { x: number; y: number }): void {
+    const m = this.motor;
+    const y = (side === 'leftArm' ? -ARM_OFFSET : ARM_OFFSET) * TORSO_SCALE;
+    out.x = m.pos.x - Math.sin(m.torsoAngle) * y;
+    out.y = m.pos.y + Math.cos(m.torsoAngle) * y;
   }
 
   setMarkersVisible(v: boolean): void {
@@ -62,6 +87,12 @@ export class MechView {
     this.hips.setPosition(x, y).setRotation(m.legAngle);
     this.legTick.setPosition(x + fx * LEG_TICK_DISTANCE, y + fy * LEG_TICK_DISTANCE).setRotation(m.legAngle);
     this.torso.setPosition(x, y).setRotation(m.torsoAngle);
+    // Arms sit either side of the body, perpendicular to the torso facing.
+    const ax = -Math.sin(m.torsoAngle) * ARM_OFFSET * TORSO_SCALE;
+    const ay = Math.cos(m.torsoAngle) * ARM_OFFSET * TORSO_SCALE;
+    this.armL.setPosition(x - ax, y - ay).setRotation(m.torsoAngle);
+    this.armR.setPosition(x + ax, y + ay).setRotation(m.torsoAngle);
+    this.debugArcs?.setPosition(x, y).setRotation(m.torsoAngle);
 
     const d = CAMERA.aimMarkerDistance;
     this.chevron

@@ -16,7 +16,8 @@ interface StickTrack {
 export class TouchSource {
   private left: StickTrack = { pointerId: null, view: sticks.left };
   private right: StickTrack = { pointerId: null, view: sticks.right };
-  private fire2Pointer: number | null = null;
+  private swapPointer: number | null = null;
+  private stickFiring = false;
 
   constructor(scene: Phaser.Scene) {
     const input = scene.input;
@@ -33,8 +34,8 @@ export class TouchSource {
     const r = this.right.view;
     r.baseX = r.knobX = rx;
     r.baseY = r.knobY = ry;
-    touchButtons.fire2.x = rx + CONTROLS.fire2Offset.x;
-    touchButtons.fire2.y = ry + CONTROLS.fire2Offset.y;
+    touchButtons.swap.x = rx + CONTROLS.swapOffset.x;
+    touchButtons.swap.y = ry + CONTROLS.swapOffset.y;
     if (this.right.pointerId !== null) this.reset();
     if (this.left.pointerId === null) {
       const l = this.left.view;
@@ -46,9 +47,9 @@ export class TouchSource {
   reset(): void {
     this.release(this.left);
     this.release(this.right);
-    this.fire2Pointer = null;
-    touchButtons.fire2.pressed = false;
-    actions.fire2 = false;
+    this.swapPointer = null;
+    touchButtons.swap.pressed = false;
+    this.setStickFire(false);
     this.layout();
   }
 
@@ -59,12 +60,16 @@ export class TouchSource {
     const y = p.y / Viewport.renderScale;
     const R = CONTROLS.stickRadius;
     const rc = rightCentre();
-    const b = touchButtons.fire2;
+    const b = touchButtons.swap;
     // Buttons take priority where they overlap the right stick's grab area.
-    if (this.fire2Pointer === null && Math.hypot(x - b.x, y - b.y) <= CONTROLS.buttonRadius * 1.15) {
-      this.fire2Pointer = p.id;
+    if (this.swapPointer === null && Math.hypot(x - b.x, y - b.y) <= CONTROLS.buttonRadius * 1.15) {
+      // Tap to switch which weapon group the right stick fires.
+      this.swapPointer = p.id;
       b.pressed = true;
-      actions.fire2 = true;
+      const firing = this.stickFiring;
+      this.setStickFire(false);
+      actions.stickGroup = actions.stickGroup === 1 ? 2 : 1;
+      this.setStickFire(firing);
     } else if (this.right.pointerId === null && Math.hypot(x - rc.x, y - rc.y) <= R * CONTROLS.rightStickGrab) {
       this.right.pointerId = p.id;
       this.right.view.active = true;
@@ -89,10 +94,9 @@ export class TouchSource {
   }
 
   private onUp(p: Phaser.Input.Pointer): void {
-    if (p.id === this.fire2Pointer) {
-      this.fire2Pointer = null;
-      touchButtons.fire2.pressed = false;
-      actions.fire2 = false;
+    if (p.id === this.swapPointer) {
+      this.swapPointer = null;
+      touchButtons.swap.pressed = false;
     }
     if (p.id === this.left.pointerId) this.release(this.left);
     else if (p.id === this.right.pointerId) this.release(this.right);
@@ -134,8 +138,15 @@ export class TouchSource {
         actions.aim.x = nx;
         actions.aim.y = ny;
       }
-      actions.fire1 = out > 0;
+      this.setStickFire(out > 0);
     }
+  }
+
+  /** The right stick fires whichever group is selected with the swap button. */
+  private setStickFire(on: boolean): void {
+    this.stickFiring = on;
+    actions.fire1 = on && actions.stickGroup === 1;
+    actions.fire2 = on && actions.stickGroup === 2;
   }
 
   private release(s: StickTrack): void {
@@ -147,7 +158,7 @@ export class TouchSource {
       actions.move.x = 0;
       actions.move.y = 0;
     } else {
-      actions.fire1 = false;
+      this.setStickFire(false);
     }
   }
 }

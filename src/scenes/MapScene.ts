@@ -12,7 +12,10 @@ import { CollisionWorld, type Circle, type Obstacle } from '../core/collision';
 import { DEG, clamp, smoothing, wrapAngle, type Vec } from '../core/math';
 import { randomSeed } from '../core/rng';
 import { play } from '../core/audio';
-import { debugInfo } from '../core/debug';
+import { DEBUG, debugInfo } from '../core/debug';
+import type { Section } from '../data/chassis';
+import { DAMAGE_RULES } from '../data/damage';
+import { SECTIONS } from '../game/units/SectionDamage';
 import { portraitPhone } from '../core/orientation';
 import { ART_SCALE, bakeGroundTile } from '../game/art';
 import { Combat } from '../game/combat/Combat';
@@ -74,6 +77,8 @@ export class MapScene extends Phaser.Scene {
   private lead: Vec = { x: 0, y: 0 };
   private aimDir: Vec = { x: 0, y: 0 };
   private debugTimer = 0;
+  private smokeTimer = 0;
+  private tmp: Vec = { x: 0, y: 0 };
   private warnTimer = 0;
 
   constructor() {
@@ -129,19 +134,13 @@ export class MapScene extends Phaser.Scene {
     hud.objectiveTotal = total;
     hud.objectiveDone = 0;
     hud.briefing = DESTROY_TARGETS.briefing(total);
-    hud.armorMax = this.player.maxHp;
     hud.heatMax = this.player.chassis.heatCapacity;
     hud.ammoMax = this.player.chassis.ammoCapacity.ballistic;
     hud.lastHit = 0;
-    hud.groups = [1, 2].map((g) => ({
-      label: this.player.weapons
-        .filter((w) => w.group === g)
-        .map((w) => w.def.short)
-        .join(' + '),
-      ready: 1,
-      empty: false,
-      usesAmmo: this.player.weapons.some((w) => w.group === g && w.def.ammoPerShot > 0),
-    }));
+    hud.hitMarkers.length = 0;
+    this.player.onSectionDestroyed = (s) => this.onSectionDestroyed(s);
+    if (DEBUG) this.player.view.showHitArcs(this);
+    this.buildGroupStatus();
     debugInfo.seed = `seed ${this.seed} · ${m.obstacles.length} obstacles · ${this.enemies.length} enemies`;
 
     // Started on a phone held upright: wait behind the rotate prompt.
@@ -177,6 +176,7 @@ export class MapScene extends Phaser.Scene {
     this.combat.listenerX = p.x;
     this.combat.listenerY = p.y;
     this.combat.update(dt);
+    this.emitDamageSmoke(dt);
     this.fx.update(dt);
     this.updateMission(dt);
     this.updateCamera(dt, cam);
@@ -286,6 +286,9 @@ export class MapScene extends Phaser.Scene {
       }
     } else if (u === this.player) {
       hud.lastHit = this.player.lastHit;
+      // Direction marker: newest first, capped.
+      hud.hitMarkers.unshift({ angle: this.player.lastHitAngle, time: this.player.lastHit });
+      if (hud.hitMarkers.length > 6) hud.hitMarkers.length = 6;
       this.cameras.main.shake(110, Math.min(0.006, 0.0015 + dmg * 0.00015), false);
     }
   }
@@ -358,16 +361,76 @@ export class MapScene extends Phaser.Scene {
     cam.centerOn(this.camPos.x, this.camPos.y);
   }
 
+  /** Weapon group labels and status (rebuilt when an arm, and its weapons, are lost). */
+  private buildGroupStatus(): void {
+    hud.groups = [1, 2].map((g) => {
+      const ws = this.player.weapons.filter((w) => w.group === g);
+      const live = ws.filter((w) => !w.destroyed);
+      return {
+        label: live.length > 0 ? live.map((w) => w.def.short).join(' + ') : ws.length > 0 ? 'DESTROYED' : '—',
+        ready: 1,
+        empty: false,
+        usesAmmo: live.some((w) => w.def.ammoPerShot > 0),
+      };
+    });
+  }
+
+  private onSectionDestroyed(s: Section): void {
+    const p = this.player;
+    if (s === 'leftArm' || s === 'rightArm') {
+      p.view.armPosition(s, this.tmp);
+      this.fx.explosion(this.tmp.x, this.tmp.y, 0.7);
+      play('explode', 1);
+      this.buildGroupStatus();
+    } else if (s === 'legs') {
+      this.fx.explosion(p.x, p.y, 0.5);
+      play('explode', 0.8);
+    }
+  }
+
+  /** Damaged sections smoke, so you can see the state of your mech in the world too. */
+  private emitDamageSmoke(dt: number): void {
+    this.smokeTimer -= dt;
+    if (this.smokeTimer > 0) return;
+    this.smokeTimer = 0.18;
+    const p = this.player;
+    if (!p.alive) return;
+    const sec = p.sections;
+    for (const s of SECTIONS) {
+      if (sec.frac(s) >= DAMAGE_RULES.smokeBelow || Math.random() < 0.5) continue;
+      if (s === 'leftArm' || s === 'rightArm') p.view.armPosition(s, this.tmp);
+      else {
+        this.tmp.x = p.x;
+        this.tmp.y = p.y;
+      }
+      this.fx.puff(this.tmp.x, this.tmp.y, sec.destroyed(s));
+    }
+  }
+
+  devDamageSection(s: Section): void {
+    this.player.damageSection(s, 60);
+  }
+
   private publishHud(_dt: number, cam: Phaser.Cameras.Scene2D.Camera): void {
     const p = this.player;
-    hud.armor = p.hp;
+    for (const s of SECTIONS) {
+      hud.sections[s] = p.sections.frac(s);
+      hud.sectionHitAt[s] = p.sections.hitAt[s];
+    }
+    hud.playerX = p.x;
+    hud.playerY = p.y;
     hud.heat = p.heat;
     hud.shutdown = p.shutdown;
     hud.ammo = p.ammo.ballistic;
     for (let g = 0; g < 2; g++) {
-      const ws = p.weapons.filter((w) => w.group === g + 1);
+      const ws = p.weapons.filter((w) => w.group === g + 1 && !w.destroyed);
       const status = hud.groups[g];
-      if (!status || ws.length === 0) continue;
+      if (!status) continue;
+      if (ws.length === 0) {
+        status.ready = 0;
+        status.empty = true;
+        continue;
+      }
       status.ready = Math.min(...ws.map((w) => 1 - w.cooldown * w.def.fireRate));
       status.empty = ws.every((w) => w.def.ammoPerShot > 0 && p.ammo.ballistic < w.def.ammoPerShot);
     }

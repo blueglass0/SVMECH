@@ -6,13 +6,16 @@ import { settings } from '../core/settings';
 import { CONTROLS } from '../config/controls';
 import type { StickView } from '../core/input/actions';
 import { hud } from '../game/hudState';
+import type { Section } from '../data/chassis';
 
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const MARGIN = 12;
 const HUD_ART_SCALE = 3;
-const PANEL_W = 236;
-const BAR_W = 170;
+const PANEL_W = 254;
+const BAR_W = 150;
+const GROUP_BAR_W = 184;
+const HIT_ARC_TIME = 1.2;
 const EDGE_INSET = 30;
 const EDGE_TOP_INSET = 64;
 
@@ -43,7 +46,8 @@ export class HudScene extends Phaser.Scene {
   private build!: Txt;
   private debugText?: Txt;
   private panelBg!: Img;
-  private armorBar!: Img;
+  private silhouette: { img: Img; section: Section; base: string; dx: number; dy: number }[] = [];
+  private hitArcs: Img[] = [];
   private heatBar!: Img;
   private heatWarnTick!: Img;
   private groupBars: { bg: Img; fill: Img }[] = [];
@@ -68,6 +72,8 @@ export class HudScene extends Phaser.Scene {
     this.groupTexts = [];
     this.groupBars = [];
     this.barBgs = [];
+    this.silhouette = [];
+    this.hitArcs = [];
     this.targetArrows = [];
     this.threatArrows = [];
     this.stickImages = [];
@@ -92,9 +98,18 @@ export class HudScene extends Phaser.Scene {
     // Status panel: armor, heat, weapon groups, ammo.
     this.panelBg = this.add.image(0, 0, 'px-bg').setOrigin(0, 0);
     const label = { fontFamily: FONT, fontSize: '10px', fontStyle: 'bold', color: '#8b98a3' };
-    this.addText(0, 0, 'ARMOR', label).setName('lbl-armor');
     this.addText(0, 0, 'HEAT', label).setName('lbl-heat');
-    this.armorBar = this.bar('px-armor');
+    // Mech silhouette (seen from above, facing up): each section coloured by condition.
+    this.silhouette = [
+      { section: 'torso', base: 'sil-torso', dx: 0, dy: -7 },
+      { section: 'leftArm', base: 'sil-arm', dx: -16, dy: -7 },
+      { section: 'rightArm', base: 'sil-arm', dx: 16, dy: -7 },
+      { section: 'legs', base: 'sil-legs', dx: 0, dy: 18 },
+    ].map((p) => ({
+      ...(p as { section: Section; base: string; dx: number; dy: number }),
+      img: this.add.image(0, 0, `${p.base}-0`).setScale(1.25 / HUD_ART_SCALE),
+    }));
+    for (let i = 0; i < 6; i++) this.hitArcs.push(this.add.image(0, 0, 'hit-arc').setScale(1 / HUD_ART_SCALE).setVisible(false));
     this.heatBar = this.bar('px-heat');
     this.heatWarnTick = this.add.image(0, 0, 'px-white').setOrigin(0.5, 0).setAlpha(0.7);
     for (let g = 0; g < 2; g++) {
@@ -147,18 +162,44 @@ export class HudScene extends Phaser.Scene {
       s.base.setVisible(touch).setPosition(s.view.baseX, s.view.baseY).setAlpha(a);
       s.knob.setVisible(touch).setPosition(s.view.knobX, s.view.knobY).setAlpha(a);
     }
-    const b = touchButtons.fire2;
+    const b = touchButtons.swap;
     this.fire2.img.setVisible(touch).setPosition(b.x, b.y).setAlpha(b.pressed ? 1 : 0.6);
     this.fire2.label.setVisible(touch).setPosition(b.x, b.y);
+    this.setTextIfChanged(this.fire2.label, 'swap', `⇄${actions.stickGroup}`);
+    // On phones, light up the group the right stick fires.
+    for (let i = 0; i < this.groupTexts.length; i++) {
+      const active = !touch || actions.stickGroup === i + 1;
+      this.groupTexts[i].setAlpha(active ? 1 : 0.45);
+    }
 
     // Bars (cheap: just scale images).
-    const armorFrac = hud.armor / hud.armorMax;
-    this.armorBar.setDisplaySize(Math.max(0.01, BAR_W * armorFrac), 8).setTexture(armorFrac < 0.3 ? 'px-hot' : 'px-armor');
+    const now = performance.now();
+    for (const piece of this.silhouette) {
+      const f = hud.sections[piece.section];
+      const flash = now - hud.sectionHitAt[piece.section] < 150;
+      const c = flash ? 5 : f <= 0 ? 4 : f < 0.25 ? 3 : f < 0.5 ? 2 : f < 0.75 ? 1 : 0;
+      const key = `${piece.base}-${c}`;
+      if (piece.img.texture.key !== key) piece.img.setTexture(key);
+    }
+
+    // Hit direction arcs around the mech, fading out.
+    const px = ((hud.playerX - hud.cam.x) / hud.cam.w) * w;
+    const py = ((hud.playerY - hud.cam.y) / hud.cam.h) * h;
+    for (let i = 0; i < this.hitArcs.length; i++) {
+      const m = hud.hitMarkers[i];
+      const age = m ? (now - m.time) / 1000 : 99;
+      const arc = this.hitArcs[i];
+      if (age > HIT_ARC_TIME) {
+        arc.setVisible(false);
+        continue;
+      }
+      arc.setVisible(true).setPosition(px, py).setRotation(m.angle).setAlpha(1 - age / HIT_ARC_TIME);
+    }
     const heatFrac = Math.min(1, hud.heat / hud.heatMax);
     this.heatBar.setDisplaySize(Math.max(0.01, BAR_W * heatFrac), 8).setTexture(heatFrac >= hud.heatWarnAt ? 'px-hot' : 'px-heat');
     hud.groups.forEach((g, i) => {
       const bar = this.groupBars[i];
-      bar.fill.setDisplaySize(Math.max(0.01, 90 * g.ready), 3).setTexture(g.empty ? 'px-hot' : g.ready >= 1 ? 'px-cyan' : 'px-heat');
+      bar.fill.setDisplaySize(Math.max(0.01, GROUP_BAR_W * g.ready), 3).setTexture(g.empty ? 'px-hot' : g.ready >= 1 ? 'px-cyan' : 'px-heat');
     });
 
     // Damage flash.
@@ -275,24 +316,26 @@ export class HudScene extends Phaser.Scene {
     this.debugText?.setPosition(w - MARGIN, 52);
 
     // Status panel: bottom centre (between the thumbs on phones).
-    const panelH = 68;
+    const panelH = 66;
     this.layoutDevice = actions.device;
     const px = Math.round(w / 2 - PANEL_W / 2);
     const py = Math.round(h - panelH - (actions.device === 'touch' ? 6 : 26));
     this.panelBg.setPosition(px, py).setDisplaySize(PANEL_W, panelH);
-    const barX = px + 54;
-    (this.children.getByName('lbl-armor') as Txt).setPosition(px + 10, py + 8);
-    (this.children.getByName('lbl-heat') as Txt).setPosition(px + 10, py + 24);
-    this.barBgs[0].setPosition(barX, py + 10).setDisplaySize(BAR_W, 8);
-    this.barBgs[1].setPosition(barX, py + 26).setDisplaySize(BAR_W, 8);
-    this.armorBar.setPosition(barX, py + 10);
-    this.heatBar.setPosition(barX, py + 26);
-    this.heatWarnTick.setPosition(barX + BAR_W * hud.heatWarnAt, py + 24).setDisplaySize(2, 12);
+    // Silhouette on the left, heat and weapon groups on the right.
+    const sx = px + 30;
+    const sy = py + 32;
+    for (const piece of this.silhouette) piece.img.setPosition(sx + piece.dx, sy + piece.dy);
+    const x0 = px + 60;
+    const barX = x0 + 34;
+    (this.children.getByName('lbl-heat') as Txt).setPosition(x0, py + 7);
+    this.barBgs[0].setPosition(barX, py + 9).setDisplaySize(BAR_W, 8);
+    this.heatBar.setPosition(barX, py + 9);
+    this.heatWarnTick.setPosition(barX + BAR_W * hud.heatWarnAt, py + 7).setDisplaySize(2, 12);
     for (let g = 0; g < 2; g++) {
-      const gx = px + 10 + g * 124;
-      this.groupTexts[g].setPosition(gx, py + 42);
-      this.groupBars[g].bg.setPosition(gx, py + 59).setDisplaySize(90, 3);
-      this.groupBars[g].fill.setPosition(gx, py + 59);
+      const gy = py + 22 + g * 22;
+      this.groupTexts[g].setPosition(x0, gy);
+      this.groupBars[g].bg.setPosition(x0, gy + 15).setDisplaySize(GROUP_BAR_W, 3);
+      this.groupBars[g].fill.setPosition(x0, gy + 15);
     }
   }
 }

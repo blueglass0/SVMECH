@@ -160,7 +160,11 @@ function tuningPanel(game: Phaser.Game): HTMLElement {
     const on = map()?.devToggleInvulnerable();
     god.textContent = `Invulnerable: ${on ? 'on' : 'off'}`;
   });
-  button(dev, 'Refill armor/ammo/heat', () => map()?.devRefill());
+  button(dev, 'Repair + refill', () => map()?.devRefill());
+  button(dev, 'Hit L arm', () => map()?.devDamageSection('leftArm'));
+  button(dev, 'Hit R arm', () => map()?.devDamageSection('rightArm'));
+  button(dev, 'Hit legs', () => map()?.devDamageSection('legs'));
+  button(dev, 'Hit torso', () => map()?.devDamageSection('torso'));
   button(dev, 'New map', () => restartMission(game));
   panel.append(devTitle, dev);
   return panel;

@@ -19,6 +19,9 @@ export class MechMotor {
   torsoAngle: number;
   /** Advances by PI per footstep; drives the walk animation. */
   stridePhase = 0;
+  /** Leg damage multipliers on top speed and turn rate (1 = undamaged). */
+  speedFactor = 1;
+  turnFactor = 1;
 
   constructor(
     public move: ChassisMovement,
@@ -46,15 +49,16 @@ export class MechMotor {
     self?: Circle,
   ): boolean {
     const m = this.move;
-    const turnRate = m.legTurnRate * DEG;
-    const turnAccel = m.legTurnAccel * DEG;
+    const turnRate = m.legTurnRate * DEG * this.turnFactor;
+    const turnAccel = m.legTurnAccel * DEG * this.turnFactor;
+    const maxSpeed = m.maxSpeed * this.speedFactor;
 
     let targetSpeed = 0;
     let targetTurnVel = 0;
 
     if (scheme === 'tank') {
       const throttle = clamp(-input.y, -1, 1);
-      targetSpeed = throttle >= 0 ? throttle * m.maxSpeed : throttle * m.maxSpeed * m.reverseFactor;
+      targetSpeed = throttle >= 0 ? throttle * maxSpeed : throttle * maxSpeed * m.reverseFactor;
       targetTurnVel = clamp(input.x, -1, 1) * turnRate;
     } else {
       const mag = Math.min(1, Math.hypot(input.x, input.y));
@@ -63,7 +67,7 @@ export class MechMotor {
         // Fastest turn that can still stop on the target heading without overshooting.
         targetTurnVel = Math.sign(diff) * Math.min(turnRate, Math.sqrt(2 * turnAccel * Math.abs(diff)));
         // Walk forward only, slower while still turning toward the direction.
-        targetSpeed = m.maxSpeed * mag * Math.max(0, Math.cos(diff));
+        targetSpeed = maxSpeed * mag * Math.max(0, Math.cos(diff));
       }
     }
 

@@ -47,8 +47,8 @@ export interface ChassisDef {
   /** Collision radius, units. */
   radius: number;
   movement: ChassisMovement;
-  /** Total armor. Milestone 4 splits this per section. */
-  armor: number;
+  /** Armor per section. The mech is destroyed when the torso reaches 0. */
+  sections: Record<Section, number>;
   /** Heat at which the mech shuts down. */
   heatCapacity: number;
   /** Heat shed per second (heat sinks add to this from milestone 6). */
@@ -76,10 +76,10 @@ export const CHASSIS: Record<string, ChassisDef> = {
       strideLength: 46,
       stepShake: 0.0012,
     },
-    armor: 600,
+    sections: { torso: 380, leftArm: 150, rightArm: 150, legs: 200 },
     heatCapacity: 100,
-    heatDissipation: 11,
-    ammoCapacity: { ballistic: 900, missile: 0 },
+    heatDissipation: 8,
+    ammoCapacity: { ballistic: 1350, missile: 0 },
     mounts: [
       { id: 'la-b', section: 'leftArm', type: 'ballistic', x: 30, y: -21 },
       { id: 'la-e', section: 'leftArm', type: 'energy', x: 24, y: -27 },

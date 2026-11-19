@@ -99,6 +99,16 @@ export class Effects {
     this.scorch.spawn(x, y, Math.random() * 6, 9999, 0.9 * size, 0, 0, 0, false);
   }
 
+  /** Smoke from a damaged section; destroyed sections also throw sparks. */
+  puff(x: number, y: number, heavy: boolean): void {
+    const a = Math.random() * Math.PI * 2;
+    this.smoke.spawn(x, y, 0, 0.9, heavy ? 0.7 : 0.45, Math.cos(a) * 15, Math.sin(a) * 15 - 10, 0.8);
+    if (heavy && Math.random() < 0.4) {
+      const s = 80 + Math.random() * 120;
+      this.sparks.spawn(x, y, 0, 0.25, 1, Math.cos(a) * s, Math.sin(a) * s);
+    }
+  }
+
   update(dt: number): void {
     this.sparks.update(dt);
     this.flashes.update(dt);

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { DAMAGE_RULES as DAMAGE_ARCS } from '../data/damage';
 
 /**
  * Vector art, drawn once into textures at boot. Textures are baked at
@@ -66,14 +67,19 @@ export function bakeArt(scene: Phaser.Scene): void {
   });
 
   // Torso: armoured body, two arm pods with guns pointing forward, cockpit, accent stripe.
+  // Arm (one texture, used for both sides): pod with a forward barrel. Separate from the body so it can be shot off.
+  bake(scene, 'mech-arm', 76, 22, (g) => {
+    g.fillStyle(C.hullDark).fillRect(14, -3, 22, 6);
+    g.fillStyle(C.hull).fillRoundedRect(-14, -9, 30, 18, 4);
+    g.lineStyle(1.5, C.edge, 0.8).strokeRoundedRect(-14, -9, 30, 18, 4);
+  });
+  // Torn-off arm stump.
+  bake(scene, 'mech-arm-stub', 76, 22, (g) => {
+    g.fillStyle(0x2a2f33).fillRoundedRect(-10, -7, 12, 14, 3);
+    g.lineStyle(1.5, 0xff7a3d, 0.9).lineBetween(2, -6, 2, 6);
+  });
+
   bake(scene, 'mech-torso', 76, 72, (g) => {
-    // Arms (with barrels).
-    for (const side of [-1, 1]) {
-      const y = side * 25;
-      g.fillStyle(C.hullDark).fillRect(14, y - 3, 22, 6);
-      g.fillStyle(C.hull).fillRoundedRect(-14, y - 9, 30, 18, 4);
-      g.lineStyle(1.5, C.edge, 0.8).strokeRoundedRect(-14, y - 9, 30, 18, 4);
-    }
     // Body.
     g.fillStyle(C.hull);
     g.beginPath();
@@ -292,6 +298,65 @@ export function bakeCombatArt(scene: Phaser.Scene): void {
     },
     3,
   );
+}
+
+/** Condition colours for the HUD silhouette: index 0 = healthy ... 3 = critical, 4 = destroyed, 5 = hit flash. */
+export const CONDITION_COLORS = [0x8fd16a, 0xd8d05a, 0xe8a33d, 0xff4d3d, 0x22272b, 0xffffff];
+
+/** HUD silhouette pieces, damage indicators and debug overlays. */
+export function bakeDamageArt(scene: Phaser.Scene): void {
+  CONDITION_COLORS.forEach((color, i) => {
+    const destroyed = i === 4;
+    const piece = (key: string, w: number, h: number, r: number) =>
+      bake(
+        scene,
+        `${key}-${i}`,
+        w + 2,
+        h + 2,
+        (g) => {
+          g.fillStyle(color, destroyed ? 1 : 0.9).fillRoundedRect(-w / 2, -h / 2, w, h, r);
+          g.lineStyle(1, destroyed ? 0xff4d3d : 0x0b0e11, destroyed ? 0.9 : 0.6).strokeRoundedRect(-w / 2, -h / 2, w, h, r);
+          if (destroyed) g.lineBetween(-w / 2 + 2, -h / 2 + 2, w / 2 - 2, h / 2 - 2);
+        },
+        3,
+      );
+    piece('sil-torso', 16, 22, 3);
+    piece('sil-arm', 8, 20, 2);
+    piece('sil-legs', 28, 10, 3);
+  });
+
+  // Hit direction: a red arc on a ring, centred on the texture so it rotates around the mech.
+  bake(
+    scene,
+    'hit-arc',
+    150,
+    150,
+    (g) => {
+      for (let i = 0; i < 3; i++) {
+        g.lineStyle(7 - i * 2, 0xff4d3d, 0.35 + i * 0.3);
+        g.beginPath();
+        g.arc(0, 0, 64, -0.45, 0.45);
+        g.strokePath();
+      }
+    },
+    3,
+  );
+
+  // Debug: the hit arcs around a mech (front green, sides blue, rear red), drawn facing +x.
+  bake(scene, 'debug-arcs', 180, 180, (g) => {
+    const wedge = (from: number, to: number, color: number) => {
+      g.fillStyle(color, 0.18);
+      g.beginPath();
+      g.slice(0, 0, 88, from, to, false);
+      g.fillPath();
+    };
+    const f = (DAMAGE_ARCS.frontDeg * Math.PI) / 180;
+    const r = Math.PI - (DAMAGE_ARCS.rearDeg * Math.PI) / 180;
+    wedge(-f, f, 0x8fd16a);
+    wedge(f, r, 0x4fa8ff);
+    wedge(-r, -f, 0x4fa8ff);
+    wedge(r, Math.PI * 2 - r, 0xff4d3d);
+  });
 }
 
 /** Ground grid as one repeating tile (cheaper than hundreds of lines). */

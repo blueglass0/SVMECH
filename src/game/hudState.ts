@@ -15,8 +15,14 @@ export interface GroupStatus {
 }
 
 export const hud = {
-  armor: 1,
-  armorMax: 1,
+  /** Armor left per section, 0..1. */
+  sections: { torso: 1, leftArm: 1, rightArm: 1, legs: 1 },
+  /** performance.now() of the last hit per section (silhouette flash). */
+  sectionHitAt: { torso: 0, leftArm: 0, rightArm: 0, legs: 0 },
+  /** Recent hits on the player: world angle the shot came from, and when. Newest first. */
+  hitMarkers: [] as { angle: number; time: number }[],
+  playerX: 0,
+  playerY: 0,
   heat: 0,
   heatMax: 1,
   heatWarnAt: 0.75,
