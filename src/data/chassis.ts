@@ -70,6 +70,11 @@ export interface ChassisDef {
    * `radius` all around. Sensors add to this.
    */
   vision: { coneDeg: number; range: number; radius: number };
+  /** What comes installed when you buy one (included in the price). */
+  stock: {
+    weapons: { mount: string; weapon: string; group: 1 | 2 }[];
+    equipment: string[];
+  };
 }
 
 export const CHASSIS: Record<string, ChassisDef> = {
@@ -106,7 +111,152 @@ export const CHASSIS: Record<string, ChassisDef> = {
       { id: 't-m', section: 'torso', type: 'missile', x: 4, y: -10 },
     ],
     vision: { coneDeg: 42, range: 620, radius: 160 },
+    stock: {
+      weapons: [
+        { mount: 'la-b', weapon: 'autocannon', group: 1 },
+        { mount: 'ra-b', weapon: 'machineGun', group: 1 },
+        { mount: 'ra-e', weapon: 'laser', group: 2 },
+      ],
+      equipment: ['standardReactor', 'heatSink'],
+    },
+  },
+
+  kestrel: {
+    id: 'kestrel',
+    name: 'Kestrel',
+    weightClass: 'light',
+    tonnage: 30,
+    radius: 24,
+    price: 230000,
+    maxTonnage: 30,
+    baseTonnage: 16,
+    internalSlots: 6,
+    movement: {
+      maxSpeed: 215,
+      reverseFactor: 0.6,
+      accel: 150,
+      decel: 190,
+      legTurnRate: 130,
+      legTurnAccel: 520,
+      torsoTurnRate: 150,
+      strideLength: 36,
+      stepShake: 0.0005,
+    },
+    sections: { torso: 230, leftArm: 90, rightArm: 90, legs: 120 },
+    heatCapacity: 80,
+    heatDissipation: 5,
+    ammoCapacity: { ballistic: 900, missile: 0 },
+    mounts: [
+      { id: 'la-e', section: 'leftArm', type: 'energy', x: 22, y: -18 },
+      { id: 'ra-b', section: 'rightArm', type: 'ballistic', x: 24, y: 17 },
+      { id: 'ra-e', section: 'rightArm', type: 'energy', x: 19, y: 22 },
+    ],
+    vision: { coneDeg: 50, range: 680, radius: 190 },
+    stock: {
+      weapons: [
+        { mount: 'la-e', weapon: 'smallLaser', group: 2 },
+        { mount: 'ra-e', weapon: 'smallLaser', group: 2 },
+        { mount: 'ra-b', weapon: 'machineGun', group: 1 },
+      ],
+      equipment: ['lightReactor', 'heatSink'],
+    },
+  },
+
+  condor: {
+    id: 'condor',
+    name: 'Condor',
+    weightClass: 'heavy',
+    tonnage: 70,
+    radius: 36,
+    price: 640000,
+    maxTonnage: 70,
+    baseTonnage: 41,
+    internalSlots: 10,
+    movement: {
+      maxSpeed: 118,
+      reverseFactor: 0.5,
+      accel: 60,
+      decel: 85,
+      legTurnRate: 60,
+      legTurnAccel: 150,
+      torsoTurnRate: 70,
+      strideLength: 54,
+      stepShake: 0.002,
+    },
+    sections: { torso: 520, leftArm: 210, rightArm: 210, legs: 260 },
+    heatCapacity: 120,
+    heatDissipation: 7,
+    ammoCapacity: { ballistic: 1800, missile: 36 },
+    mounts: [
+      { id: 'la-b', section: 'leftArm', type: 'ballistic', x: 36, y: -25 },
+      { id: 'la-e', section: 'leftArm', type: 'energy', x: 29, y: -32 },
+      { id: 'ra-b', section: 'rightArm', type: 'ballistic', x: 36, y: 25 },
+      { id: 'ra-e', section: 'rightArm', type: 'energy', x: 29, y: 32 },
+      { id: 't-m', section: 'torso', type: 'missile', x: 5, y: -12 },
+      { id: 't-m2', section: 'torso', type: 'missile', x: 5, y: 12 },
+    ],
+    vision: { coneDeg: 38, range: 600, radius: 150 },
+    stock: {
+      weapons: [
+        { mount: 'la-b', weapon: 'autocannon', group: 1 },
+        { mount: 'ra-b', weapon: 'autocannon', group: 1 },
+        { mount: 'ra-e', weapon: 'laser', group: 2 },
+        { mount: 't-m', weapon: 'missilePack', group: 2 },
+      ],
+      equipment: ['standardReactor', 'heatSink'],
+    },
+  },
+
+  roc: {
+    id: 'roc',
+    name: 'Roc',
+    weightClass: 'assault',
+    tonnage: 90,
+    radius: 42,
+    price: 960000,
+    maxTonnage: 90,
+    baseTonnage: 54,
+    internalSlots: 12,
+    movement: {
+      maxSpeed: 92,
+      reverseFactor: 0.45,
+      accel: 45,
+      decel: 65,
+      legTurnRate: 45,
+      legTurnAccel: 110,
+      torsoTurnRate: 55,
+      strideLength: 62,
+      stepShake: 0.003,
+    },
+    sections: { torso: 700, leftArm: 280, rightArm: 280, legs: 340 },
+    heatCapacity: 140,
+    heatDissipation: 8,
+    ammoCapacity: { ballistic: 2250, missile: 48 },
+    mounts: [
+      { id: 'la-b', section: 'leftArm', type: 'ballistic', x: 42, y: -29 },
+      { id: 'la-b2', section: 'leftArm', type: 'ballistic', x: 38, y: -36 },
+      { id: 'la-e', section: 'leftArm', type: 'energy', x: 33, y: -40 },
+      { id: 'ra-b', section: 'rightArm', type: 'ballistic', x: 42, y: 29 },
+      { id: 'ra-e', section: 'rightArm', type: 'energy', x: 38, y: 36 },
+      { id: 'ra-e2', section: 'rightArm', type: 'energy', x: 33, y: 40 },
+      { id: 't-m', section: 'torso', type: 'missile', x: 6, y: -14 },
+      { id: 't-m2', section: 'torso', type: 'missile', x: 6, y: 14 },
+    ],
+    vision: { coneDeg: 35, range: 580, radius: 140 },
+    stock: {
+      weapons: [
+        { mount: 'la-b', weapon: 'autocannon', group: 1 },
+        { mount: 'ra-b', weapon: 'autocannon', group: 1 },
+        { mount: 'la-e', weapon: 'laser', group: 2 },
+        { mount: 'ra-e', weapon: 'laser', group: 2 },
+        { mount: 't-m', weapon: 'missilePack', group: 2 },
+      ],
+      equipment: ['heavyReactor', 'heatSink', 'heatSink'],
+    },
   },
 };
+
+/** Chassis the shop sells, in display order. */
+export const CHASSIS_ORDER = ['kestrel', 'vulture', 'condor', 'roc'];
 
 export const STARTER_CHASSIS = 'vulture';

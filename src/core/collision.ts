@@ -32,8 +32,9 @@ export class CollisionWorld {
   readonly alive: Uint8Array;
   /** Obstacle index hit by the last `raycast` (-1 if none). */
   lastHit = -1;
-  /** Obstacles crushed during the last `resolveCircle` call. */
+  /** Obstacles crushed during the last `resolveCircle` call, and their total drag. */
   crushed = 0;
+  crushedDrag = 0;
   /** Called when an obstacle takes damage (`destroyed` = it just collapsed). */
   onChange?: (index: number, destroyed: boolean, crushed: boolean) => void;
   readonly cols: number;
@@ -70,6 +71,7 @@ export class CollisionWorld {
   resolveCircle(pos: Vec, r: number, bodies?: readonly Circle[], self?: Circle, crushTonnage = 0): boolean {
     let hit = false;
     this.crushed = 0;
+    this.crushedDrag = 0;
     for (let pass = 0; pass < 2; pass++) {
       const near = this.query(pos.x - r, pos.y - r, pos.x + r, pos.y + r);
       for (const i of near) {
@@ -78,6 +80,7 @@ export class CollisionWorld {
           if (overlaps(pos, r, this.obstacles[i])) {
             this.destroy(i, true);
             this.crushed++;
+            this.crushedDrag += this.terrain[i].crushDrag;
           }
           continue;
         }

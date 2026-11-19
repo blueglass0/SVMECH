@@ -1,7 +1,7 @@
 import type Phaser from 'phaser';
 import * as C from '../career/career';
 import type { CareerState, CombatLevel, Contract, Debrief, MissionOutcome } from '../career/types';
-import { CHASSIS, type Section } from '../data/chassis';
+import { CHASSIS, CHASSIS_ORDER, type Section } from '../data/chassis';
 import { ECONOMY, SHOP_STOCK } from '../data/economy';
 import { WEAPONS, type WeaponDef } from '../data/weapons';
 import { EQUIPMENT, type EquipmentDef } from '../data/equipment';
@@ -27,6 +27,8 @@ export class App {
   private screen: HTMLElement;
   private tab: Tab = 'contracts';
   private selectedContract: number | null = null;
+  /** Mech being edited in the Mechs tab. */
+  private selectedMech = 0;
   private ammoTarget = { ballistic: 0, missile: 0 };
   private flash = '';
   private inMission = false;
@@ -119,7 +121,7 @@ export class App {
               'div',
               { class: 'panel' },
               h('button', { class: 'primary big', onclick: () => this.showHangar() }, 'Continue career'),
-              h('p', { class: 'muted small' }, `${money(c.money)} · ${c.stats.missions} missions · ${CHASSIS[c.mech.chassis].name}`),
+              h('p', { class: 'muted small' }, `${money(c.money)} · ${c.stats.missions} missions · ${c.mechs.length} mech${c.mechs.length > 1 ? 's' : ''}`),
               h('button', { class: 'link', onclick: () => (newCareerBox.hidden = !newCareerBox.hidden) }, 'or start a new career'),
             )
           : null,
@@ -135,7 +137,7 @@ export class App {
     this.tab = tab;
     const tabs: [Tab, string][] = [
       ['contracts', 'Contracts'],
-      ['mech', C.totalRepairCost(c) > 0 || c.mech.destroyed ? 'Mech •' : 'Mech'],
+      ['mech', c.mechs.some((m) => C.totalRepairCost(c, m) > 0 || m.destroyed) ? 'Mechs •' : 'Mechs'],
       ['shop', 'Shop'],
       ['finance', 'Finance'],
     ];
@@ -184,13 +186,14 @@ export class App {
             class: `card tier${k.tier}`,
             onclick: () => {
               this.selectedContract = k.id;
-              this.ammoTarget = { ...C.ammoCapacity(c.mech) };
+              this.ammoTarget = { ...C.ammoCapacity(C.activeMech(c)) };
               this.showHangar('contracts');
             },
           },
           h('div', { class: 'card-top' }, h('span', { class: 'tier' }, `${ECONOMY.tiers[k.tier].name}`), h('span', { class: 'pay' }, money(k.payout))),
           h('div', { class: 'card-title' }, `${k.employer}`),
           h('div', { class: 'muted small' }, `vs ${k.enemy} · destroy ${k.targets} uplinks`),
+          k.maxTonnage ? h('div', { class: 'small limit' }, `Tonnage limit: ${k.maxTonnage} t per mech`) : null,
           h('div', { class: 'small bonus' }, `Bonus +${money(C.bonusPayout(k))}: ${k.bonus.label}`),
         ),
       ),
@@ -198,26 +201,28 @@ export class App {
   }
 
   private deployPanel(c: CareerState, k: Contract): HTMLElement {
-    const cap = C.ammoCapacity(c.mech);
-    const current = { ballistic: c.mech.ammo.ballistic, missile: c.mech.ammo.missile ?? 0 };
+    const active = C.activeMech(c);
+    const cap = C.ammoCapacity(active);
+    const current = { ballistic: active.ammo.ballistic, missile: active.ammo.missile ?? 0 };
     const t = this.ammoTarget;
     t.ballistic = Math.max(current.ballistic, Math.min(cap.ballistic, t.ballistic));
     t.missile = Math.max(current.missile, Math.min(cap.missile, t.missile));
-    const fuel = C.fuelCost(c);
     const costs = h('div', { class: 'rows' });
     const deployBtn = h('button', { class: 'primary big', onclick: () => this.deploy(k) }, 'Deploy');
     const warn = h('div', { class: 'warn' });
     const outs = { ballistic: h('output'), missile: h('output') };
     const renderCosts = () => {
-      const ammo = C.ammoCost(c, t);
+      const d = C.deployCost(c, t);
       outs.ballistic.textContent = `${t.ballistic} / ${cap.ballistic}`;
       outs.missile.textContent = `${t.missile} / ${cap.missile}`;
+      const total = d.fuel + d.ammo + d.backupFuel + d.backupAmmo;
       costs.replaceChildren(
-        row('Fuel', `${C.tonnage(c.mech)} t`, money(-fuel)),
-        row('Ammo', `+${t.ballistic - current.ballistic} rounds${cap.missile > 0 ? `, +${t.missile - current.missile} missiles` : ''}`, money(-ammo)),
-        row('Money after', '', money(c.money - fuel - ammo), 'total'),
+        row('Fuel', `${C.tonnage(active)} t`, money(-d.fuel)),
+        row('Ammo', `+${t.ballistic - current.ballistic} rounds${cap.missile > 0 ? `, +${t.missile - current.missile} missiles` : ''}`, money(-d.ammo)),
+        ...(C.backups(c).length > 0 ? [row('Backups', 'fuel and full ammo', money(-(d.backupFuel + d.backupAmmo)))] : []),
+        row('Money after', '', money(c.money - total), 'total'),
       );
-      const b = C.deployBlocker(c, t);
+      const b = C.deployBlocker(c, k, t);
       warn.textContent = b ?? '';
       deployBtn.disabled = !!b;
     };
@@ -243,7 +248,41 @@ export class App {
     const ammoFields = [ammoField('ballistic', 'Ballistic ammo', 10), cap.missile > 0 ? ammoField('missile', 'Missiles', 2) : null];
     renderCosts();
 
-    const damaged = SECTIONS.filter((s) => C.sectionRepairCost(c, s) > 0);
+    const damaged = SECTIONS.filter((s) => C.sectionRepairCost(c, active, s) > 0);
+    const others = c.mechs.filter((m) => m.id !== active.id);
+    const lance = h(
+      'div',
+      { class: 'lance' },
+      h(
+        'div',
+        { class: 'row' },
+        h('span', null, h('b', null, C.mechName(c, active)), h('span', { class: 'muted small' }, `  active · ${C.tonnage(active)} t`)),
+        h('button', { class: 'link', onclick: () => this.showHangar('mech') }, 'Change'),
+      ),
+      others.length > 0
+        ? h(
+            'div',
+            { class: 'muted small' },
+            `Backups (up to ${ECONOMY.maxBackups}) drop in if your mech is destroyed:`,
+          )
+        : null,
+      others.map((m) => {
+        const on = c.backupIds.includes(m.id);
+        const blocked = C.mechBlocker(m, k, C.mechName(c, m));
+        return h(
+          'label',
+          { class: 'check' },
+          h('input', {
+            type: 'checkbox',
+            checked: on,
+            disabled: !on && (c.backupIds.length >= ECONOMY.maxBackups || !!blocked),
+            onchange: () => this.act(() => C.toggleBackup(c, m.id)),
+          }),
+          ` ${C.mechName(c, m)} · ${C.tonnage(m)} t`,
+          blocked && !on ? h('span', { class: 'muted small' }, ` (${blocked.replace(`${C.mechName(c, m)}`, '').replace(/^[: ]+/, '')})`) : null,
+        );
+      }),
+    );
     return h(
       'div',
       { class: 'deploy' },
@@ -253,15 +292,22 @@ export class App {
         h('div', { class: 'card-top' }, h('span', { class: 'tier' }, ECONOMY.tiers[k.tier].name), h('span', { class: 'pay' }, money(k.payout))),
         h('h3', null, k.employer),
         h('p', { class: 'muted' }, k.flavor),
-        h('div', { class: 'rows' }, row('Objective', `Destroy ${k.targets} uplink towers`, ''), row('Bonus', k.bonus.label, `+${money(C.bonusPayout(k))}`)),
+        h(
+          'div',
+          { class: 'rows' },
+          row('Objective', `Destroy ${k.targets} uplink towers, then reach evac`, ''),
+          row('Bonus', k.bonus.label, `+${money(C.bonusPayout(k))}`),
+          k.maxTonnage ? row('Tonnage limit', 'every deployed mech', `${k.maxTonnage} t`) : null,
+        ),
       ),
       h(
         'div',
         { class: 'panel' },
         h('h3', null, 'Prepare'),
+        lance,
         ammoFields,
         costs,
-        damaged.length > 0 && !c.mech.destroyed
+        damaged.length > 0 && !active.destroyed
           ? h('p', { class: 'warn' }, `Damaged: ${damaged.map((s) => SECTION_NAMES[s]).join(', ')}. Repair in the Mech tab, or deploy as is.`)
           : null,
         warn,
@@ -295,7 +341,8 @@ export class App {
   // ---------- Mech ----------
 
   private mechTab(c: CareerState): HTMLElement {
-    const m = c.mech;
+    const m = C.getMech(c, this.selectedMech) ?? C.activeMech(c);
+    this.selectedMech = m.id;
     const chassis = CHASSIS[m.chassis];
     const check = C.checkLoadout(m);
 
@@ -310,16 +357,16 @@ export class App {
             h('p', { class: 'warn' }, 'Destroyed in battle. Rebuild it to deploy again.'),
             h(
               'button',
-              { class: 'primary', disabled: C.rebuildCost(c) > c.money, onclick: () => this.act(() => C.rebuild(c), 'Mech rebuilt.') },
-              `Rebuild ${money(C.rebuildCost(c))}`,
+              { class: 'primary', disabled: C.rebuildCost(c, m) > c.money, onclick: () => this.act(() => C.rebuild(c, m), 'Mech rebuilt.') },
+              `Rebuild ${money(C.rebuildCost(c, m))}`,
             ),
-            C.rebuildCost(c) > c.money ? h('p', { class: 'muted small' }, 'Not enough money: sell spare gear or take a loan (Finance).') : null,
+            C.rebuildCost(c, m) > c.money ? h('p', { class: 'muted small' }, 'Not enough money: sell spare gear or take a loan (Finance).') : null,
           )
         : [
             ...SECTIONS.map((s) => {
-              const max = chassis.sections[s];
+              const max = mechStats(m).sections[s];
               const hp = m.sections[s];
-              const cost = C.sectionRepairCost(c, s);
+              const cost = C.sectionRepairCost(c, m, s);
               const f = hp / max;
               return h(
                 'div',
@@ -328,15 +375,15 @@ export class App {
                 h('span', { class: 'bar' }, h('i', { style: `width:${f * 100}%`, class: f <= 0 ? 'dead' : f < 0.25 ? 'crit' : f < 0.5 ? 'low' : '' })),
                 h('span', { class: 'num' }, hp <= 0 ? 'destroyed' : `${Math.round(hp)}/${max}`),
                 cost > 0
-                  ? h('button', { class: 'small-btn', disabled: cost > c.money, onclick: () => this.act(() => C.repairSection(c, s)) }, `Repair ${money(cost)}`)
+                  ? h('button', { class: 'small-btn', disabled: cost > c.money, onclick: () => this.act(() => C.repairSection(c, m, s)) }, `Repair ${money(cost)}`)
                   : h('span', { class: 'muted small' }, 'OK'),
               );
             }),
-            C.totalRepairCost(c) > 0
+            C.totalRepairCost(c, m) > 0
               ? h(
                   'button',
-                  { class: 'primary', disabled: C.totalRepairCost(c) > c.money, onclick: () => this.act(() => C.repairAll(c), 'Repaired.') },
-                  `Repair all ${money(C.totalRepairCost(c))}`,
+                  { class: 'primary', disabled: C.totalRepairCost(c, m) > c.money, onclick: () => this.act(() => C.repairAll(c, m), 'Repaired.') },
+                  `Repair all ${money(C.totalRepairCost(c, m))}`,
                 )
               : null,
           ],
@@ -355,7 +402,7 @@ export class App {
           {
             onchange: (e: Event) => {
               const v = (e.target as HTMLSelectElement).value;
-              this.act(() => (v === '' ? C.uninstall(c, mount.id) : C.install(c, mount.id, v)));
+              this.act(() => (v === '' ? C.uninstall(c, m, mount.id) : C.install(c, m, mount.id, v)));
             },
           },
           h('option', { value: '' }, '— empty —'),
@@ -372,7 +419,7 @@ export class App {
                 'span',
                 { class: 'seg small' },
                 ([1, 2] as const).map((g) =>
-                  h('button', { type: 'button', class: installed.group === g ? 'on' : '', onclick: () => this.act(() => C.setGroup(c, mount.id, g)) }, `G${g}`),
+                  h('button', { type: 'button', class: installed.group === g ? 'on' : '', onclick: () => this.act(() => C.setGroup(m, mount.id, g)) }, `G${g}`),
                 ),
               )
             : h('span'),
@@ -402,7 +449,7 @@ export class App {
           'div',
           { class: 'shop-row' },
           h('div', null, h('b', null, EQUIPMENT[id].name), h('div', { class: 'muted small' }, equipmentStats(EQUIPMENT[id]))),
-          h('button', { class: 'small-btn', onclick: () => this.act(() => C.removeEquipment(c, i)) }, 'Remove'),
+          h('button', { class: 'small-btn', onclick: () => this.act(() => C.removeEquipment(c, m, i)) }, 'Remove'),
         ),
       ),
       spareEquipment.length > 0
@@ -412,7 +459,7 @@ export class App {
             h('span', null, 'Add'),
             h(
               'select',
-              { onchange: (e: Event) => this.act(() => C.installEquipment(c, (e.target as HTMLSelectElement).value)) },
+              { onchange: (e: Event) => this.act(() => C.installEquipment(c, m, (e.target as HTMLSelectElement).value)) },
               h('option', { value: '' }, '— choose spare equipment —'),
               spareEquipment.map((id) => h('option', { value: id }, `${EQUIPMENT[id].name} (${EQUIPMENT[id].slots} slot${EQUIPMENT[id].slots > 1 ? 's' : ''})`)),
             ),
@@ -420,7 +467,56 @@ export class App {
           )
         : h('p', { class: 'muted small' }, 'Buy equipment in the Shop to fit it here. Installing a reactor swaps out the old one.'),
     );
-    return h('div', { class: 'cols' }, armor, loadout, equipment);
+    return h('div', null, this.hangarList(c, m), h('div', { class: 'cols' }, armor, loadout, equipment));
+  }
+
+  /** Every owned mech, with its role (active / backup) and status; pick one to edit. */
+  private hangarList(c: CareerState, selected: CareerState['mechs'][number]): HTMLElement {
+    return h(
+      'div',
+      { class: 'hangar-list' },
+      c.mechs.map((m) => {
+        const role = m.id === c.activeMechId ? 'Active' : c.backupIds.includes(m.id) ? `Backup ${c.backupIds.indexOf(m.id) + 1}` : 'Reserve';
+        const repair = C.totalRepairCost(c, m);
+        const status = m.destroyed ? 'Destroyed' : repair > 0 ? 'Damaged' : 'Ready';
+        const ch = CHASSIS[m.chassis];
+        return h(
+          'div',
+          { class: `mech-card ${m.id === selected.id ? 'on' : ''} ${m.destroyed ? 'dead' : ''}` },
+          h(
+            'button',
+            { type: 'button', class: 'mech-pick', onclick: () => ((this.selectedMech = m.id), this.showHangar('mech')) },
+            h('b', null, C.mechName(c, m)),
+            h('span', { class: 'muted small' }, ` ${ch.weightClass} · ${C.tonnage(m)}/${ch.maxTonnage} t`),
+            h('div', { class: `small role ${role === 'Active' ? 'active' : ''}` }, `${role} · ${status}`),
+          ),
+          h(
+            'div',
+            { class: 'mech-actions' },
+            m.id !== c.activeMechId ? h('button', { class: 'small-btn', onclick: () => this.act(() => C.setActive(c, m.id)) }, 'Make active') : null,
+            m.id !== c.activeMechId
+              ? h(
+                  'button',
+                  { class: 'small-btn', disabled: !c.backupIds.includes(m.id) && c.backupIds.length >= ECONOMY.maxBackups, onclick: () => this.act(() => C.toggleBackup(c, m.id)) },
+                  c.backupIds.includes(m.id) ? 'Unset backup' : 'Set backup',
+                )
+              : null,
+            c.mechs.length > 1
+              ? h(
+                  'button',
+                  {
+                    class: 'small-btn danger',
+                    onclick: () =>
+                      confirm(`Sell ${C.mechName(c, m)} and everything fitted to it for ${money(C.mechSellValue(c, m))}?`) &&
+                      this.act(() => C.sellMech(c, m.id), 'Mech sold.'),
+                  },
+                  `Sell ${money(C.mechSellValue(c, m))}`,
+                )
+              : null,
+          ),
+        );
+      }),
+    );
   }
 
   // ---------- Shop ----------
@@ -443,6 +539,40 @@ export class App {
         h('button', { class: 'small-btn', disabled: cost > c.money, onclick: () => this.act(() => C.buyItem(c, id), `Bought ${itemName(id)}.`) }, `Buy ${money(cost)}`),
       );
     };
+    const mechs = h(
+      'div',
+      { class: 'panel' },
+      h('h3', null, 'Mechs'),
+      CHASSIS_ORDER.map((id) => {
+        const ch = CHASSIS[id];
+        const cost = C.chassisPrice(c, id);
+        const armor = ch.sections.torso + ch.sections.leftArm + ch.sections.rightArm + ch.sections.legs;
+        return h(
+          'div',
+          { class: 'shop-row' },
+          h(
+            'div',
+            null,
+            h('b', null, ch.name),
+            h('span', { class: 'chip' }, `${ch.weightClass} ${ch.tonnage} t`),
+            h(
+              'div',
+              { class: 'muted small' },
+              `speed ${ch.movement.maxSpeed} · torso ${ch.movement.torsoTurnRate}°/s · armor ${armor} · ${ch.mounts.length} hardpoints · ${ch.internalSlots} slots · vision ${ch.vision.coneDeg * 2}°`,
+            ),
+            h('div', { class: 'muted small' }, `Comes with: ${ch.stock.weapons.map((w) => WEAPONS[w.weapon].name).join(', ')}`),
+          ),
+          h(
+            'button',
+            { class: 'small-btn', disabled: cost > c.money, onclick: () => this.act(() => {
+              const m = C.buyChassis(c, id);
+              if (m) this.selectedMech = m.id;
+            }, `Bought a ${ch.name}. It's in your hangar (Mechs tab).`) },
+            `Buy ${money(cost)}`,
+          ),
+        );
+      }),
+    );
     const weapons = h('div', { class: 'panel' }, h('h3', null, 'Weapons'), SHOP_STOCK.filter(isWeapon).map(item));
     const equipment = h('div', { class: 'panel' }, h('h3', null, 'Equipment'), SHOP_STOCK.filter(isEquipment).map(item));
     const sell = h(
@@ -460,7 +590,7 @@ export class App {
             ),
           ),
     );
-    return h('div', { class: 'cols' }, weapons, equipment, sell);
+    return h('div', { class: 'cols' }, mechs, weapons, equipment, sell);
   }
 
   // ---------- Finance ----------
@@ -535,8 +665,11 @@ export class App {
     const o = d.outcome;
     const c = this.career!;
     const accuracy = o.shots > 0 ? Math.round((o.hits / o.shots) * 100) : 0;
-    const title = o.won ? 'Mission complete' : o.withdrew ? 'Withdrew' : o.mech.destroyed ? 'Mech destroyed' : 'Mission failed';
-    const repairs = C.totalRepairCost(c);
+    const allLost = o.mechs.length > 0 && o.mechs.slice(0, o.backupsUsed + 1).every((m) => m.destroyed);
+    const title = o.won ? 'Mission complete' : o.withdrew ? 'Withdrew' : allLost ? 'Mechs destroyed' : 'Mission failed';
+    // Repair or rebuild bill for every mech that went out.
+    const fielded = o.mechs.slice(0, o.backupsUsed + 1).map((m) => C.getMech(c, m.id)).filter((m): m is NonNullable<typeof m> => !!m);
+    const repairs = fielded.reduce((t, m) => t + (m.destroyed ? C.rebuildCost(c, m) : C.totalRepairCost(c, m)), 0);
     this.show(
       h(
         'div',
@@ -566,11 +699,12 @@ export class App {
               row('Damage taken', '', String(Math.round(o.damageTaken))),
               row('Accuracy', `${o.hits}/${o.shots}`, `${accuracy}%`),
               row('Ammo used', '', String(o.ammoUsed)),
-              row(o.mech.destroyed ? 'Rebuild cost' : 'Repairs needed', '', money(o.mech.destroyed ? C.rebuildCost(c) : repairs)),
+              o.backupsUsed > 0 ? row('Backups used', '', String(o.backupsUsed)) : null,
+              row(fielded.some((m) => m.destroyed) ? 'Repairs and rebuilds' : 'Repairs needed', '', money(repairs)),
             ),
           ),
         ),
-        h('div', { class: 'actions' }, h('button', { class: 'primary big', onclick: () => this.showHangar(c.mech.destroyed || repairs > 0 ? 'mech' : 'contracts') }, 'Return to hangar')),
+        h('div', { class: 'actions' }, h('button', { class: 'primary big', onclick: () => this.showHangar(repairs > 0 ? 'mech' : 'contracts') }, 'Return to hangar')),
       ),
     );
     if (c.overReason && !c.over) c.overReason = undefined;

@@ -4,8 +4,9 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 
 ## Current milestone
 
-**Milestone 6b — Destructible terrain: built, awaiting the user's playtest.** M1–M6 signed off.
-Next by plan: 7 (hangar and backups, + contract tonnage limits and field stations).
+**Milestone 7 part 1 — Chassis, hangar, backups, tonnage limits: built, awaiting the user's
+playtest.** M1–M6b signed off. M7 part 2 (next): swap stations, field ammo/repair stations,
+and the interact action (F on PC, a phone button).
 Deferred by the user: line-of-sight shadow rendering (logic already hides enemies behind
 walls); revisit as a graphics option, likely in M11.
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
@@ -195,6 +196,26 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
 - Drawing: `world/terrainArt.ts` draws by type and damage stage (intact, cracked, badly
   damaged, rubble); a chunk's Graphics is redrawn only when one of its obstacles changes stage.
   ~155 obstacles per map; measured map logic ~0.43 ms/frame.
+
+## Hangar and backup notes (M7 part 1)
+
+- Four chassis in `chassis.ts` (`CHASSIS_ORDER`): Kestrel light 30 t, Vulture medium 50 t,
+  Condor heavy 70 t, Roc assault 90 t. Each has movement, armor, hardpoints, slots, vision and
+  a `stock` loadout included in its price. Art scales by `radius / 30` (`MechView` size).
+- Career: `mechs[]` (each `MechState` has an `id`), `activeMechId`, `backupIds` (≤
+  `ECONOMY.maxBackups` = 2). Every mech function takes the mech it acts on. Old saves with a
+  single `mech` migrate on load. Buying a chassis adds a mech; selling pays a share of its value
+  minus repairs (destroyed: 25%); you can't sell your last mech.
+- Deploy: active mech + backups (backups pay 30% fuel and get full ammo). `MissionConfig.backups`.
+  In battle, when the mech dies, the next backup drops ~2.2 s later at a clear spot near the wreck,
+  away from enemies (`MapScene.dropBackup`, `attachPlayer`). No backups left = mission failed.
+  `MissionOutcome.mechs` returns every deployed mech's final state (unused backups unchanged).
+- Contracts may have `maxTonnage` (35% chance; 40/55/75 t; +15% pay); every deployed mech must
+  fit (`mechBlocker`).
+- Career over now considers all mechs: no deployable mech you can fuel, no rebuild you can
+  afford, even selling spares and reserve mechs, with a loan already taken.
+- Terrain tweak (after 6b): light buildings (240 HP), sandbags (110 HP, crush 60), barriers
+  crush 70; crushing slows by `0.3 × drag × 50/tonnage`.
 
 ## Conventions
 

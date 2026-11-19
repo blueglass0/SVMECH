@@ -29,16 +29,18 @@ export class MechView {
     scene: Phaser.Scene,
     private motor: MechMotor,
     showAimMarker: boolean,
+    /** Size relative to the medium mech the art is drawn for. */
+    private size = 1,
   ) {
-    const s = 1 / ART_SCALE;
-    this.legTick = scene.add.image(0, 0, 'leg-tick').setScale(s).setDepth(3);
+    const s = size / ART_SCALE;
+    this.legTick = scene.add.image(0, 0, 'leg-tick').setScale(1 / ART_SCALE).setDepth(3);
     this.footL = scene.add.image(0, 0, 'mech-foot').setScale(s).setDepth(4);
     this.footR = scene.add.image(0, 0, 'mech-foot').setScale(s).setDepth(4);
     this.hips = scene.add.image(0, 0, 'mech-hips').setScale(s).setDepth(4);
     this.torso = scene.add.image(0, 0, 'mech-torso').setScale(s * TORSO_SCALE).setDepth(6);
     this.armL = scene.add.image(0, 0, 'mech-arm').setScale(s * TORSO_SCALE).setDepth(6);
     this.armR = scene.add.image(0, 0, 'mech-arm').setScale(s * TORSO_SCALE).setDepth(6);
-    this.chevron = scene.add.image(0, 0, 'aim-chevron').setScale(s).setVisible(showAimMarker).setDepth(10);
+    this.chevron = scene.add.image(0, 0, 'aim-chevron').setScale(1 / ART_SCALE).setVisible(showAimMarker).setDepth(10);
   }
 
   /** Dim the mech (shutdown, destroyed). */
@@ -59,7 +61,7 @@ export class MechView {
   /** World position of an arm (for smoke and explosions). */
   armPosition(side: 'leftArm' | 'rightArm', out: { x: number; y: number }): void {
     const m = this.motor;
-    const y = (side === 'leftArm' ? -ARM_OFFSET : ARM_OFFSET) * TORSO_SCALE;
+    const y = (side === 'leftArm' ? -ARM_OFFSET : ARM_OFFSET) * TORSO_SCALE * this.size;
     out.x = m.pos.x - Math.sin(m.torsoAngle) * y;
     out.y = m.pos.y + Math.cos(m.torsoAngle) * y;
   }
@@ -67,6 +69,7 @@ export class MechView {
   setMarkersVisible(v: boolean): void {
     this.chevron.setVisible(v);
     this.legTick.setVisible(v);
+    this.debugArcs?.setVisible(v);
   }
 
   update(dt: number): void {
@@ -79,17 +82,17 @@ export class MechView {
     const fx = Math.cos(m.legAngle);
     const fy = Math.sin(m.legAngle);
     const swing = Math.sin(m.stridePhase) * mv.strideLength * 0.35 * this.gait;
-    const lateral = 19;
+    const lateral = 19 * this.size;
 
     // Left foot is at -90° from facing (screen y is down, so that's (fy, -fx)).
     this.footL.setPosition(x + fy * lateral + fx * swing, y - fx * lateral + fy * swing).setRotation(m.legAngle);
     this.footR.setPosition(x - fy * lateral - fx * swing, y + fx * lateral - fy * swing).setRotation(m.legAngle);
     this.hips.setPosition(x, y).setRotation(m.legAngle);
-    this.legTick.setPosition(x + fx * LEG_TICK_DISTANCE, y + fy * LEG_TICK_DISTANCE).setRotation(m.legAngle);
+    this.legTick.setPosition(x + fx * LEG_TICK_DISTANCE * this.size, y + fy * LEG_TICK_DISTANCE * this.size).setRotation(m.legAngle);
     this.torso.setPosition(x, y).setRotation(m.torsoAngle);
     // Arms sit either side of the body, perpendicular to the torso facing.
-    const ax = -Math.sin(m.torsoAngle) * ARM_OFFSET * TORSO_SCALE;
-    const ay = Math.cos(m.torsoAngle) * ARM_OFFSET * TORSO_SCALE;
+    const ax = -Math.sin(m.torsoAngle) * ARM_OFFSET * TORSO_SCALE * this.size;
+    const ay = Math.cos(m.torsoAngle) * ARM_OFFSET * TORSO_SCALE * this.size;
     this.armL.setPosition(x - ax, y - ay).setRotation(m.torsoAngle);
     this.armR.setPosition(x + ax, y + ay).setRotation(m.torsoAngle);
     this.debugArcs?.setPosition(x, y).setRotation(m.torsoAngle);

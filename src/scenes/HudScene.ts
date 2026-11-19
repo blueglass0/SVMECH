@@ -41,6 +41,7 @@ export class HudScene extends Phaser.Scene {
   private hintKey = '';
   private objective!: Txt;
   private bonus!: Txt;
+  private backupsText!: Txt;
   private briefing!: Txt;
   private warning!: Txt;
   private groupTexts: Txt[] = [];
@@ -89,6 +90,7 @@ export class HudScene extends Phaser.Scene {
 
     this.objective = this.addText(MARGIN, MARGIN, '', { fontFamily: FONT, fontSize: '14px', fontStyle: 'bold', color: '#e8a33d' });
     this.bonus = this.addText(MARGIN, MARGIN + 20, '', { fontFamily: FONT, fontSize: '12px', color: '#8b98a3' });
+    this.backupsText = this.addText(MARGIN, MARGIN + 37, '', { fontFamily: FONT, fontSize: '12px', color: '#7fe6ff' });
     this.briefing = this.addText(0, 0, '', {
       fontFamily: FONT,
       fontSize: '17px',
@@ -251,6 +253,7 @@ export class HudScene extends Phaser.Scene {
       );
       const keys = touch ? ['', ''] : ['Q ', 'E '];
       this.setTextIfChanged(this.equipText, 'eqt', hud.equipment.map((e, i) => `${keys[i]}${e.label}${e.active ? ' ●' : ''}`).join('     '));
+      this.setTextIfChanged(this.backupsText, 'backups', hud.backups > 0 ? `Backups ready: ${hud.backups}` : '');
       const mark = hud.bonusState === 'done' ? '  ✓' : hud.bonusState === 'failed' ? '  ✗' : '';
       if (this.setTextIfChanged(this.bonus, 'bonus', hud.bonusLabel ? `Bonus: ${hud.bonusLabel}${mark}` : '')) {
         this.bonus.setColor(hud.bonusState === 'done' ? '#8fd16a' : hud.bonusState === 'failed' ? '#ff6a5a' : '#8b98a3');

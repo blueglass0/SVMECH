@@ -22,10 +22,19 @@ export function drawTerrain(g: Phaser.GameObjects.Graphics, o: Obstacle, t: Terr
   }
   g.fillStyle(t.fill).fillRect(o.x, o.y, o.w, o.h);
   g.lineStyle(type === 'fence' ? 1.5 : type === 'shed' ? 2 : 3, t.edge).strokeRect(o.x, o.y, o.w, o.h);
-  if (type === 'building') {
+  if (type === 'building' || type === 'lightBuilding') {
     // Roof detail so buildings read as solid blocks.
     const inset = Math.min(14, o.w / 4, o.h / 4);
     g.lineStyle(1.5, t.edge, 0.5).strokeRect(o.x + inset, o.y + inset, o.w - inset * 2, o.h - inset * 2);
+  } else if (type === 'sandbags') {
+    // Stacked bags.
+    g.lineStyle(1, t.edge, 0.6);
+    const along = o.w > o.h;
+    const n = Math.max(2, Math.round((along ? o.w : o.h) / 14));
+    for (let k = 1; k < n; k++) {
+      if (along) g.lineBetween(o.x + (o.w * k) / n, o.y, o.x + (o.w * k) / n, o.y + o.h);
+      else g.lineBetween(o.x, o.y + (o.h * k) / n, o.x + o.w, o.y + (o.h * k) / n);
+    }
   } else if (type === 'shed') {
     // Roof ridge.
     if (o.w > o.h) g.lineStyle(1.5, t.edge, 0.7).lineBetween(o.x, o.y + o.h / 2, o.x + o.w, o.y + o.h / 2);

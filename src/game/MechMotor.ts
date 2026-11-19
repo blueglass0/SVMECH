@@ -89,8 +89,11 @@ export class MechMotor {
     this.pos.x += fx * this.speed * dt;
     this.pos.y += fy * this.speed * dt;
     const blocked = world.resolveCircle(this.pos, this.radius, bodies, self, this.crushTonnage);
-    // Crushing a tree or shed costs a little momentum.
-    if (world.crushed > 0) this.speed *= Math.pow(CRUSH_SLOWDOWN, world.crushed);
+    // Crushing terrain costs momentum; heavier mechs lose less.
+    if (world.crushed > 0) {
+      const lose = CRUSH_SLOWDOWN * world.crushedDrag * (50 / Math.max(10, this.crushTonnage));
+      this.speed *= Math.max(0.3, 1 - lose);
+    }
     if (blocked && dt > 0) {
       // Walking into something kills the speed you couldn't use; sliding along a wall keeps some.
       const along = ((this.pos.x - ox) * fx + (this.pos.y - oy) * fy) / dt;

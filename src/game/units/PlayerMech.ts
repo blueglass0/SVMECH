@@ -75,6 +75,8 @@ export class PlayerMech implements Unit {
   stats = { shots: 0, damageTaken: 0, ammoUsed: 0 };
   /** Derived from the loadout: heat, armor max, ammo capacity, equipment. */
   readonly loadout: MechStats;
+  /** Hangar id of the mech this is. */
+  readonly id: number;
   readonly equipmentIds: string[];
   equip: EquipmentState;
   private prevEquip = [false, false];
@@ -82,6 +84,7 @@ export class PlayerMech implements Unit {
 
   constructor(scene: Phaser.Scene, state: MechState, movement: ChassisMovement, x: number, y: number, angle: number) {
     this.chassis = CHASSIS[state.chassis];
+    this.id = state.id;
     this.radius = this.chassis.radius;
     this.equipmentIds = [...state.equipment];
     this.loadout = mechStats(state);
@@ -91,7 +94,8 @@ export class PlayerMech implements Unit {
     this.ammo = { ...state.ammo };
     this.motor = new MechMotor(movement, this.radius, x, y, angle);
     this.motor.crushTonnage = this.chassis.tonnage;
-    this.view = new MechView(scene, this.motor, true);
+    // Art is drawn for a 30-radius (medium) mech; other chassis scale it.
+    this.view = new MechView(scene, this.motor, true, this.radius / 30);
     this.weapons = state.weapons.map((w) => ({
       def: WEAPONS[w.weapon],
       mount: this.chassis.mounts.find((m) => m.id === w.mount)!,
@@ -114,12 +118,13 @@ export class PlayerMech implements Unit {
       flareCooldown: 0,
       pdCooldown: 0,
     };
-    this.shieldImg = scene.add.image(x, y, 'shield-bubble').setScale(1 / 2).setDepth(9).setVisible(false);
+    this.shieldImg = scene.add.image(x, y, 'shield-bubble').setScale(this.radius / 30 / 2).setDepth(9).setVisible(false);
   }
 
   /** The mech's state to carry back to the career after the mission. */
   toState(): MechState {
     return {
+      id: this.id,
       chassis: this.chassis.id,
       weapons: this.weapons.map((w) => ({ mount: w.mount.id, weapon: w.def.id, group: w.group })),
       equipment: [...this.equipmentIds],

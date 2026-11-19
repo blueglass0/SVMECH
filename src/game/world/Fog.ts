@@ -26,6 +26,10 @@ export class FogOverlay {
     this.img = scene.add.image(0, 0, key).setScale((COVER * 2) / SIZE).setDepth(13);
   }
 
+  destroy(): void {
+    this.img.destroy();
+  }
+
   update(x: number, y: number, angle: number, alpha: number): void {
     this.img.setPosition(x, y).setRotation(angle).setAlpha(alpha).setVisible(alpha > 0);
   }

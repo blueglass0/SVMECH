@@ -41,6 +41,8 @@ export const hud = {
   objectiveDone: 0,
   objectiveTotal: 0,
   briefing: '',
+  /** Backup mechs still waiting on the ship. */
+  backups: 0,
   /** Contract bonus objective. */
   bonusLabel: '',
   bonusState: 'open' as 'open' | 'done' | 'failed',
