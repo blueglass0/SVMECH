@@ -21,6 +21,8 @@ export const CONTROLS = {
   equip1Offset: { x: -26, y: -124 },
   equip2Offset: { x: 54, y: -114 },
   equipButtonRadius: 30,
+  /** Interact button (field stations), lower left of the right stick; only shown at a station. */
+  interactOffset: { x: -112, y: 50 },
   /** A floating stick's base never spawns closer than this to the screen edge (beyond its radius). */
   stickEdgeMargin: 26,
 } as const;

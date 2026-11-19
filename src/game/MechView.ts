@@ -48,6 +48,11 @@ export class MechView {
     for (const img of [this.footL, this.footR, this.hips, this.torso, this.armL, this.armR]) img.setAlpha(a);
   }
 
+  setVisible(v: boolean): void {
+    for (const img of [this.footL, this.footR, this.hips, this.torso, this.armL, this.armR, this.chevron, this.legTick]) img.setVisible(v);
+    this.debugArcs?.setVisible(v);
+  }
+
   /** Swap an arm for a stump (destroyed) or restore it. */
   setArm(side: 'leftArm' | 'rightArm', intact: boolean): void {
     (side === 'leftArm' ? this.armL : this.armR).setTexture(intact ? 'mech-arm' : 'mech-arm-stub');

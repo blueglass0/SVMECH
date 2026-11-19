@@ -78,6 +78,10 @@ export interface MissionConfig {
   mech: MechState;
   /** Dropped in, in order, when the mech in the field is destroyed. */
   backups: MechState[];
+  /** Money available for field services (after deployment costs). */
+  funds: number;
+  /** Field service prices, markup and difficulty already applied. */
+  fieldPrices: { repairPerArmor: number; ammoBallistic: number; ammoMissile: number; swapFee: number };
   /** Combat difficulty multipliers (career setting × contract tier). */
   enemyCount: number;
   enemySpread: number;
@@ -100,8 +104,10 @@ export interface MissionOutcome {
   ammoUsed: number;
   /** Final state of every deployed mech (armor, ammo, destroyed), active first. */
   mechs: MechState[];
-  /** Backups that dropped in during the mission. */
+  /** Backups that dropped in (or were swapped in) during the mission. */
   backupsUsed: number;
+  /** Money spent at field stations during the mission. */
+  fieldCosts: { label: string; amount: number }[];
 }
 
 export interface DebriefLine {

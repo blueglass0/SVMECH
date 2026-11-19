@@ -263,7 +263,7 @@ export class App {
         ? h(
             'div',
             { class: 'muted small' },
-            `Backups (up to ${ECONOMY.maxBackups}) drop in if your mech is destroyed:`,
+            ECONOMY.maxBackups === 1 ? 'Backup (drops in if your mech is destroyed):' : `Backups (up to ${ECONOMY.maxBackups}) drop in if your mech is destroyed:`,
           )
         : null,
       others.map((m) => {
@@ -275,7 +275,7 @@ export class App {
           h('input', {
             type: 'checkbox',
             checked: on,
-            disabled: !on && (c.backupIds.length >= ECONOMY.maxBackups || !!blocked),
+            disabled: !on && !!blocked,
             onchange: () => this.act(() => C.toggleBackup(c, m.id)),
           }),
           ` ${C.mechName(c, m)} · ${C.tonnage(m)} t`,
@@ -476,7 +476,7 @@ export class App {
       'div',
       { class: 'hangar-list' },
       c.mechs.map((m) => {
-        const role = m.id === c.activeMechId ? 'Active' : c.backupIds.includes(m.id) ? `Backup ${c.backupIds.indexOf(m.id) + 1}` : 'Reserve';
+        const role = m.id === c.activeMechId ? 'Active' : c.backupIds.includes(m.id) ? (ECONOMY.maxBackups === 1 ? 'Backup' : `Backup ${c.backupIds.indexOf(m.id) + 1}`) : 'Reserve';
         const repair = C.totalRepairCost(c, m);
         const status = m.destroyed ? 'Destroyed' : repair > 0 ? 'Damaged' : 'Ready';
         const ch = CHASSIS[m.chassis];
@@ -497,7 +497,7 @@ export class App {
             m.id !== c.activeMechId
               ? h(
                   'button',
-                  { class: 'small-btn', disabled: !c.backupIds.includes(m.id) && c.backupIds.length >= ECONOMY.maxBackups, onclick: () => this.act(() => C.toggleBackup(c, m.id)) },
+                  { class: 'small-btn', onclick: () => this.act(() => C.toggleBackup(c, m.id)) },
                   c.backupIds.includes(m.id) ? 'Unset backup' : 'Set backup',
                 )
               : null,

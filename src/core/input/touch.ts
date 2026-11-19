@@ -18,6 +18,7 @@ export class TouchSource {
   private right: StickTrack = { pointerId: null, view: sticks.right };
   private swapPointer: number | null = null;
   private equipPointers: (number | null)[] = [null, null];
+  private interactPointer: number | null = null;
   private stickFiring = false;
 
   constructor(scene: Phaser.Scene) {
@@ -41,6 +42,8 @@ export class TouchSource {
     touchButtons.equip1.y = ry + CONTROLS.equip1Offset.y;
     touchButtons.equip2.x = rx + CONTROLS.equip2Offset.x;
     touchButtons.equip2.y = ry + CONTROLS.equip2Offset.y;
+    touchButtons.interact.x = rx + CONTROLS.interactOffset.x;
+    touchButtons.interact.y = ry + CONTROLS.interactOffset.y;
     if (this.right.pointerId !== null) this.reset();
     if (this.left.pointerId === null) {
       const l = this.left.view;
@@ -58,6 +61,9 @@ export class TouchSource {
     this.equipPointers = [null, null];
     touchButtons.equip1.pressed = touchButtons.equip2.pressed = false;
     actions.equip1 = actions.equip2 = false;
+    this.interactPointer = null;
+    touchButtons.interact.pressed = false;
+    actions.interact = false;
     this.layout();
   }
 
@@ -73,7 +79,12 @@ export class TouchSource {
     const eqIndex = [touchButtons.equip1, touchButtons.equip2].findIndex(
       (eb, i) => eb.visible && this.equipPointers[i] === null && Math.hypot(x - eb.x, y - eb.y) <= CONTROLS.equipButtonRadius * 1.15,
     );
-    if (eqIndex >= 0) {
+    const ib = touchButtons.interact;
+    if (ib.visible && this.interactPointer === null && Math.hypot(x - ib.x, y - ib.y) <= CONTROLS.equipButtonRadius * 1.2) {
+      this.interactPointer = p.id;
+      ib.pressed = true;
+      actions.interact = true;
+    } else if (eqIndex >= 0) {
       this.equipPointers[eqIndex] = p.id;
       (eqIndex === 0 ? touchButtons.equip1 : touchButtons.equip2).pressed = true;
       if (eqIndex === 0) actions.equip1 = true;
@@ -110,6 +121,11 @@ export class TouchSource {
   }
 
   private onUp(p: Phaser.Input.Pointer): void {
+    if (p.id === this.interactPointer) {
+      this.interactPointer = null;
+      touchButtons.interact.pressed = false;
+      actions.interact = false;
+    }
     const eq = this.equipPointers.indexOf(p.id);
     if (eq >= 0) {
       this.equipPointers[eq] = null;

@@ -171,6 +171,8 @@ This is a new game project. Read docs/PLAN.md: it's the full design and build pl
 - Heat should be a build choice: some builds run hot and need heat management, others barely notice it, with trade-offs both ways.
 - Phone weapon groups: the right stick fires the selected group; a button next to it switches between group 1 and 2. A smoother phone solution is still wanted later.
 - Aim assist on phones stays light.
+- One backup mech per mission: a single extra chance (after M7).
+- Field stations (ammo, repair, swap) are single-use per station and cost 1.5× hangar prices; field repair can't fix destroyed sections.
 
 ## Open questions
 
@@ -178,6 +180,5 @@ This is a new game project. Read docs/PLAN.md: it's the full design and build pl
 
 Decided so far: power is a build budget, tank controls on PC and direction-based movement on phone, an open-ended sandbox career, and the loan rule for losing your last mech. Still open:
 
-- [ ] **Backup slots (milestone 7).** How many backups the ship carries, tuned in playtesting.
 - [ ] **Final mission (someday).** Whether to add one, and what it would be.
 - [ ] **Final title.** Steel Vulture for now.

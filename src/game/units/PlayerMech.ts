@@ -296,6 +296,13 @@ export class PlayerMech implements Unit {
     this.updateLegs();
   }
 
+  /** Swap station: the mech is flown home intact; it leaves the battlefield. */
+  airlift(): void {
+    this.view.setVisible(false);
+    this.shieldImg.setVisible(false);
+    this.equip.shieldUp = 0;
+  }
+
   /** Dev tool: damage one section directly. */
   damageSection(section: Section, amount: number): void {
     const rel = { torso: 0, rightArm: Math.PI / 2, leftArm: -Math.PI / 2, legs: 0 }[section];

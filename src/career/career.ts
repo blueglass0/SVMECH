@@ -166,11 +166,15 @@ export function setActive(s: CareerState, id: number): void {
   s.backupIds = s.backupIds.filter((b) => b !== id);
 }
 
-/** Add or remove a mech from the backup list (up to `maxBackups`). */
+/** Add or remove a mech from the backups. When full, the newest choice replaces the oldest. */
 export function toggleBackup(s: CareerState, id: number): void {
   if (id === s.activeMechId || !getMech(s, id)) return;
-  if (s.backupIds.includes(id)) s.backupIds = s.backupIds.filter((b) => b !== id);
-  else if (s.backupIds.length < ECONOMY.maxBackups) s.backupIds.push(id);
+  if (s.backupIds.includes(id)) {
+    s.backupIds = s.backupIds.filter((b) => b !== id);
+    return;
+  }
+  s.backupIds.push(id);
+  while (s.backupIds.length > ECONOMY.maxBackups) s.backupIds.shift();
 }
 
 export function chassisPrice(s: CareerState, chassisId: string): number {
@@ -500,10 +504,18 @@ export function deploy(s: CareerState, contractId: number, target: AmmoTarget): 
   s.activeContract = contract.id;
   const combat = COMBAT_DIFFICULTY[s.difficulty.combat];
   const copy = (m: MechState) => JSON.parse(JSON.stringify(m)) as MechState;
+  const mk = ECONOMY.field.markup * econ(s).costs;
   return {
     contract,
     mech: copy(a),
     backups: bs.map(copy),
+    funds: s.money,
+    fieldPrices: {
+      repairPerArmor: ECONOMY.repairPerArmor * mk,
+      ammoBallistic: ECONOMY.ammoPrice.ballistic * mk,
+      ammoMissile: ECONOMY.ammoPrice.missile * mk,
+      swapFee: price(s, ECONOMY.field.swapFee),
+    },
     enemyCount: combat.enemyCount * ECONOMY.tiers[contract.tier].enemyCount,
     enemySpread: combat.enemySpread,
     enemyDamage: combat.enemyDamage,
@@ -534,6 +546,10 @@ export function completeMission(s: CareerState, contract: Contract, outcome: Mis
     }
   } else {
     lines.push({ label: outcome.withdrew ? 'Withdrew: no payment' : 'Mission failed: no payment', amount: 0 });
+  }
+  for (const f of outcome.fieldCosts ?? []) {
+    spend(s, f.amount);
+    lines.push({ label: f.label, amount: -f.amount });
   }
   const lost = outcome.mechs.filter((m) => m.destroyed);
   if (lost.length > 0) {

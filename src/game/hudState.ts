@@ -41,6 +41,11 @@ export const hud = {
   objectiveDone: 0,
   objectiveTotal: 0,
   briefing: '',
+  /** Field station prompt while standing on one ('' = none), and whether it can be used. */
+  interactPrompt: '',
+  interactReady: false,
+  /** Unused field stations (edge arrows). */
+  stations: [] as Vec[],
   /** Backup mechs still waiting on the ship. */
   backups: 0,
   /** Contract bonus objective. */
