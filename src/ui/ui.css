@@ -436,3 +436,67 @@ body.in-mission .toolbar .mission-only {
     padding-top: 8px;
   }
 }
+
+/* Hangar list (Mechs tab) */
+.hangar-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.mech-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mech-card.on {
+  border-color: var(--accent);
+}
+.mech-card.dead {
+  opacity: 0.7;
+}
+.screen button.mech-pick {
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  font-weight: 400;
+  line-height: 1.4;
+}
+.role {
+  color: var(--muted);
+}
+.role.active {
+  color: var(--accent);
+}
+.mech-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.limit {
+  color: #ffc561;
+}
+.lance {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.check {
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.check input {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+}

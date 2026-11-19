@@ -5,6 +5,8 @@ export type CombatLevel = 'easy' | 'normal' | 'hard';
 
 /** A mech the player owns, between missions. */
 export interface MechState {
+  /** Unique within the career (hangar slot id). */
+  id: number;
   chassis: string;
   weapons: Loadout['weapons'];
   /** Internal equipment ids, including the reactor. */
@@ -35,6 +37,8 @@ export interface Contract {
   targets: number;
   payout: number;
   bonus: BonusObjective;
+  /** Every deployed mech must weigh at most this (loaded), if set. */
+  maxTonnage?: number;
 }
 
 export interface LoanState {
@@ -49,7 +53,13 @@ export interface CareerState {
   version: 1;
   money: number;
   loan: LoanState | null;
-  mech: MechState;
+  /** The hangar: every mech the player owns. */
+  mechs: MechState[];
+  /** The mech deployed first. */
+  activeMechId: number;
+  /** Mechs carried as backups (in drop order). */
+  backupIds: number[];
+  nextMechId: number;
   /** Weapon and equipment ids owned but not installed. */
   inventory: string[];
   contracts: Contract[];
@@ -66,6 +76,8 @@ export interface CareerState {
 export interface MissionConfig {
   contract: Contract;
   mech: MechState;
+  /** Dropped in, in order, when the mech in the field is destroyed. */
+  backups: MechState[];
   /** Combat difficulty multipliers (career setting × contract tier). */
   enemyCount: number;
   enemySpread: number;
@@ -86,8 +98,10 @@ export interface MissionOutcome {
   shots: number;
   hits: number;
   ammoUsed: number;
-  /** The mech's state at the end (armor, ammo, destroyed). */
-  mech: MechState;
+  /** Final state of every deployed mech (armor, ammo, destroyed), active first. */
+  mechs: MechState[];
+  /** Backups that dropped in during the mission. */
+  backupsUsed: number;
 }
 
 export interface DebriefLine {

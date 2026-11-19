@@ -20,6 +20,14 @@ export const ECONOMY = {
   contractsOnBoard: 4,
   /** Bonus objective pays this fraction of the base payout. */
   bonusFraction: 0.25,
+  /** Backup mechs the ship carries (tune in playtesting). */
+  maxBackups: 2,
+  /** Backups cost this fraction of their normal fuel (they ride along). */
+  backupFuelFraction: 0.3,
+  /** Chance a contract has a tonnage limit, the limits used, and the extra pay for one. */
+  tonnageLimitChance: 0.35,
+  tonnageLimits: [40, 55, 75],
+  tonnageLimitPayBonus: 0.15,
   tiers: {
     1: { name: 'Low risk', payout: [55000, 75000], targets: 2, enemyCount: 0.7 },
     2: { name: 'Standard', payout: [90000, 120000], targets: 3, enemyCount: 1 },

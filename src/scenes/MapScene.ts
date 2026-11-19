@@ -26,13 +26,13 @@ import { NavGrid } from '../game/world/NavGrid';
 import { FogOverlay } from '../game/world/Fog';
 import { drawTerrain, terrainStage } from '../game/world/terrainArt';
 import { generateDestroyTargets, type MissionMap } from '../game/world/mapgen';
-import type { MissionConfig, MissionOutcome } from '../career/types';
+import type { MechState, MissionConfig, MissionOutcome } from '../career/types';
 import { newCareer } from '../career/career';
 
 /** Mission config for quick dev runs without a career (?quick). */
 function quickConfig(seed: number): MissionConfig {
   const c = newCareer('normal', 'normal');
-  return { contract: { ...c.contracts[0], seed }, mech: c.mech, enemyCount: 1, enemySpread: 1, enemyDamage: 1 };
+  return { contract: { ...c.contracts[0], seed }, mech: c.mechs[0], backups: [], enemyCount: 1, enemySpread: 1, enemyDamage: 1 };
 }
 
 /** Live movement numbers: the tuning panel edits this, and it survives mission restarts. */
@@ -40,6 +40,8 @@ const liveMovement: ChassisMovement = { ...CHASSIS[STARTER_CHASSIS].movement };
 
 const CHUNK = 800;
 const END_DELAY = 1.8;
+/** Seconds between a mech's destruction and its backup landing. */
+const BACKUP_DROP_DELAY = 2.2;
 /** Reach within this distance of the evac point to finish. */
 const EVAC_RADIUS = 80;
 /** The evac zone opens at least this far from where the mech is. */
@@ -85,6 +87,12 @@ export class MapScene extends Phaser.Scene {
   private tmp: Vec = { x: 0, y: 0 };
   private warnTimer = 0;
   private evac: Vec | null = null;
+  /** Every mech fielded this mission (first = the one deployed), and backups still waiting. */
+  private deployed: PlayerMech[] = [];
+  private backupQueue: MechState[] = [];
+  /** Seconds until the next backup lands (0 = none dropping). */
+  private dropTimer = 0;
+  private sectionLost = false;
   private fog?: FogOverlay;
   private visionTimer = 0;
   /** Dev toggle: fog of war off shows every enemy. */
@@ -103,6 +111,7 @@ export class MapScene extends Phaser.Scene {
     this.config = data.contract ? (data as MissionConfig) : quickConfig(urlSeed || randomSeed());
     this.seed = this.config.contract.seed;
     this.withdrew = false;
+    this.fog = undefined;
     this.evac = null;
     this.evacImg = undefined;
     this.briefingUntil = 4.5;
@@ -127,6 +136,10 @@ export class MapScene extends Phaser.Scene {
 
     this.fx = new Effects(this);
     this.player = new PlayerMech(this, cfg.mech, this.movement, m.spawn.x, m.spawn.y, m.spawn.angle);
+    this.deployed = [this.player];
+    this.backupQueue = [...cfg.backups];
+    this.dropTimer = 0;
+    this.sectionLost = false;
     for (const p of [...m.targets, ...m.turrets, ...m.tanks]) {
       this.enemies.push(createEnemy(this, p.type, p.x, p.y, p.angle, p.home));
     }
@@ -137,10 +150,6 @@ export class MapScene extends Phaser.Scene {
     this.combat.onUnitHit = (u, team, dmg) => this.onUnitHit(u, team, dmg);
     this.ai = { player: this.player, world: this.world, nav, combat: this.combat, fx: this.fx, bodies: this.bodies, difficulty };
     this.controls = new InputSystem(this);
-    // Phone equipment buttons only appear for fitted, activated equipment.
-    touchButtons.equip1.visible = this.player.loadout.actions.length >= 1;
-    touchButtons.equip2.visible = this.player.loadout.actions.length >= 2;
-    this.fog = new FogOverlay(this, this.player.loadout.vision);
     this.visionTimer = 0;
     this.lockImg = this.add.image(0, 0, 'lock').setScale(1 / ART_SCALE).setDepth(12).setVisible(false);
     this.lockTarget = null;
@@ -164,13 +173,10 @@ export class MapScene extends Phaser.Scene {
     hud.briefing = DESTROY_TARGETS.briefing(total);
     hud.bonusLabel = cfg.contract.bonus.label;
     hud.bonusState = 'open';
-    hud.heatMax = this.player.chassis.heatCapacity;
-    hud.ammoMax = this.player.loadout.ammoCapacity.ballistic;
     hud.lastHit = 0;
     hud.hitMarkers.length = 0;
-    this.player.onSectionDestroyed = (s) => this.onSectionDestroyed(s);
-    if (DEBUG) this.player.view.showHitArcs(this);
-    this.buildGroupStatus();
+    hud.backups = this.backupQueue.length;
+    this.attachPlayer();
     debugInfo.seed = `seed ${this.seed} · ${m.obstacles.length} obstacles · ${this.enemies.length} enemies`;
 
     // Started on a phone held upright: wait behind the rotate prompt.
@@ -358,7 +364,7 @@ export class MapScene extends Phaser.Scene {
         if (this.elapsed > (b.seconds ?? 0)) return 'failed';
         return this.state === 'won' ? 'done' : 'open';
       case 'intact':
-        if (SECTIONS.some((sec) => p.sections.destroyed(sec))) return 'failed';
+        if (this.sectionLost || SECTIONS.some((sec) => p.sections.destroyed(sec))) return 'failed';
         return this.state === 'won' ? 'done' : 'open';
     }
   }
@@ -492,10 +498,21 @@ export class MapScene extends Phaser.Scene {
       for (const s of this.structures) if (!s.alive) done++;
       hud.objectiveDone = done;
       if (!p.alive) {
-        this.state = 'lost';
-        this.fx.explosion(p.x, p.y, 1.6);
-        play('bigExplode', 1);
-        this.rebuildBodies();
+        if (this.dropTimer === 0) {
+          // Just destroyed: explode, then drop the next backup or fail.
+          this.fx.explosion(p.x, p.y, 1.6);
+          play('bigExplode', 1);
+          this.rebuildBodies();
+          if (this.backupQueue.length > 0) {
+            this.dropTimer = BACKUP_DROP_DELAY;
+            hud.briefing = `${CHASSIS[p.chassis.id].name} lost. Backup dropping in.`;
+            this.briefingUntil = this.elapsed + 3;
+          } else {
+            this.state = 'lost';
+          }
+        } else if ((this.dropTimer -= dt) <= 0) {
+          this.dropBackup();
+        }
       } else if (done === this.structures.length && !this.evac) {
         this.openEvac();
       } else if (this.evac && Math.hypot(p.x - this.evac.x, p.y - this.evac.y) < EVAC_RADIUS) {
@@ -516,6 +533,7 @@ export class MapScene extends Phaser.Scene {
     if (this.endTimer < END_DELAY && (this.endTimer += dt) >= END_DELAY) {
       hud.state = this.state;
       this.controls.reset();
+      const sum = (f: (m: PlayerMech) => number) => this.deployed.reduce((t, m) => t + f(m), 0);
       const outcome: MissionOutcome = {
         won: this.state === 'won',
         withdrew: this.withdrew,
@@ -525,11 +543,12 @@ export class MapScene extends Phaser.Scene {
         targetsDestroyed: this.structures.filter((t) => !t.alive).length,
         targetsTotal: this.structures.length,
         damageDealt: this.damageDealt,
-        damageTaken: p.stats.damageTaken,
-        shots: p.stats.shots,
+        damageTaken: sum((m) => m.stats.damageTaken),
+        shots: sum((m) => m.stats.shots),
         hits: this.hits,
-        ammoUsed: p.stats.ammoUsed,
-        mech: p.toState(),
+        ammoUsed: sum((m) => m.stats.ammoUsed),
+        mechs: [...this.deployed.map((m) => m.toState()), ...this.backupQueue],
+        backupsUsed: this.deployed.length - 1,
       };
       this.game.events.emit('mission-end', outcome);
     }
@@ -558,7 +577,63 @@ export class MapScene extends Phaser.Scene {
     });
   }
 
+  /** Hook up everything that follows the player's mech (start of mission, and each backup drop). */
+  private attachPlayer(): void {
+    const p = this.player;
+    this.ai.player = p;
+    hud.heatMax = p.loadout.heatCapacity;
+    hud.ammoMax = p.loadout.ammoCapacity.ballistic;
+    p.onSectionDestroyed = (s) => this.onSectionDestroyed(s);
+    if (DEBUG) p.view.showHitArcs(this);
+    // Phone equipment buttons only appear for fitted, activated equipment.
+    touchButtons.equip1.visible = p.loadout.actions.length >= 1;
+    touchButtons.equip2.visible = p.loadout.actions.length >= 2;
+    this.fog?.destroy();
+    this.fog = new FogOverlay(this, p.loadout.vision);
+    this.buildGroupStatus();
+  }
+
+  /** Drop the next backup at a clear spot near where the last mech fell, away from enemies. */
+  private dropBackup(): void {
+    const state = this.backupQueue.shift();
+    if (!state) return;
+    const old = this.player;
+    const r = CHASSIS[state.chassis].radius + 10;
+    let best = { x: this.map.spawn.x, y: this.map.spawn.y };
+    let bestScore = -Infinity;
+    for (let ring = 0; ring < 5; ring++) {
+      for (let i = 0; i < 24; i++) {
+        const a = (i / 24) * Math.PI * 2 + ring;
+        const d = 120 + ring * 110;
+        const x = old.x + Math.cos(a) * d;
+        const y = old.y + Math.sin(a) * d;
+        if (this.world.circleBlocked(x, y, r) || this.bodies.some((b) => Math.hypot(b.x - x, b.y - y) < b.radius + r)) continue;
+        let nearest = 1500;
+        for (const e of this.enemies) if (e.alive) nearest = Math.min(nearest, Math.hypot(e.x - x, e.y - y));
+        const score = Math.min(nearest, 700) - d * 0.3;
+        if (score > bestScore) {
+          bestScore = score;
+          best = { x, y };
+        }
+      }
+    }
+    this.dropTimer = 0;
+    this.player = new PlayerMech(this, state, this.movement, best.x, best.y, old.motor.torsoAngle);
+    this.deployed.push(this.player);
+    this.units[this.units.indexOf(old)] = this.player;
+    this.rebuildBodies();
+    this.attachPlayer();
+    hud.backups = this.backupQueue.length;
+    // Landing: flash, dust and a heavy thud.
+    this.fx.explosion(best.x, best.y, 1.2);
+    play('collapse', 1);
+    this.cameras.main.shake(250, 0.006, false);
+    hud.briefing = `Backup ${CHASSIS[state.chassis].name} deployed.`;
+    this.briefingUntil = this.elapsed + 3;
+  }
+
   private onSectionDestroyed(s: Section): void {
+    this.sectionLost = true;
     const p = this.player;
     if (s === 'leftArm' || s === 'rightArm') {
       p.view.armPosition(s, this.tmp);

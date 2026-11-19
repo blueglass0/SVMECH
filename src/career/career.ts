@@ -1,4 +1,4 @@
-import { CHASSIS, type Section } from '../data/chassis';
+import { CHASSIS, CHASSIS_ORDER, type Section } from '../data/chassis';
 import { COMBAT_DIFFICULTY } from '../data/difficulty';
 import { CONTRACT_FLAVOR, ECONOMY, ECONOMY_DIFFICULTY, EMPLOYERS, ENEMY_FORCES, SHOP_STOCK } from '../data/economy';
 import { STARTER_LOADOUT } from '../data/loadouts';
@@ -21,8 +21,8 @@ import type {
 } from './types';
 
 /**
- * Career rules: money, upkeep, contracts, shop, loadout limits, loans and
- * career over. Pure logic on a `CareerState`; the UI calls these and saves.
+ * Career rules: money, hangar, upkeep, contracts, shop, loadout limits, loans
+ * and career over. Pure logic on a `CareerState`; the UI calls these and saves.
  */
 
 const SAVE_KEY = 'steel-vulture.career.v1';
@@ -33,11 +33,21 @@ export function loadCareer(): CareerState | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
-    const s = JSON.parse(raw) as CareerState;
+    const s = JSON.parse(raw) as CareerState & { mech?: MechState };
     if (s.version !== 1) return null;
-    // Saves from before equipment existed (M5): give the mech the starter reactor and heat sink.
-    if (!s.mech.equipment) s.mech.equipment = [...STARTER_LOADOUT.equipment];
-    normalizeMech(s);
+    // Saves from before the hangar (M7) had a single `mech`.
+    if (s.mech && !s.mechs) {
+      s.mechs = [{ ...s.mech, id: 1 }];
+      s.activeMechId = 1;
+      s.backupIds = [];
+      s.nextMechId = 2;
+      delete s.mech;
+    }
+    for (const m of s.mechs) {
+      // Saves from before equipment existed (M5): give the mech the starter reactor and heat sink.
+      if (!m.equipment) m.equipment = [...STARTER_LOADOUT.equipment];
+      normalizeMech(m);
+    }
     return s;
   } catch {
     return null;
@@ -61,19 +71,14 @@ export function deleteCareer(): void {
 }
 
 export function newCareer(combat: CombatLevel, economy: CombatLevel): CareerState {
-  const chassis = CHASSIS[STARTER_LOADOUT.chassis];
   const s: CareerState = {
     version: 1,
     money: ECONOMY.startingMoney,
     loan: null,
-    mech: {
-      chassis: chassis.id,
-      weapons: STARTER_LOADOUT.weapons.map((w) => ({ ...w })),
-      equipment: [...STARTER_LOADOUT.equipment],
-      sections: { ...chassis.sections },
-      ammo: { ...chassis.ammoCapacity },
-      destroyed: false,
-    },
+    mechs: [],
+    activeMechId: 1,
+    backupIds: [],
+    nextMechId: 1,
     inventory: [],
     contracts: [],
     difficulty: { combat, economy },
@@ -82,6 +87,7 @@ export function newCareer(combat: CombatLevel, economy: CombatLevel): CareerStat
     activeContract: null,
     over: false,
   };
+  s.activeMechId = addMech(s, STARTER_LOADOUT.chassis).id;
   refreshContracts(s);
   return s;
 }
@@ -108,6 +114,93 @@ export function price(s: CareerState, base: number): number {
 
 export function sellPrice(s: CareerState, itemId: string): number {
   return Math.round(price(s, itemPrice(itemId)) * ECONOMY.sellFraction);
+}
+
+// ---------- Hangar ----------
+
+/** A new mech of a chassis with its stock loadout, full armor and ammo. */
+function addMech(s: CareerState, chassisId: string): MechState {
+  const c = CHASSIS[chassisId];
+  const m: MechState = {
+    id: s.nextMechId++,
+    chassis: c.id,
+    weapons: c.stock.weapons.map((w) => ({ ...w })),
+    equipment: [...c.stock.equipment],
+    sections: { ...c.sections },
+    ammo: { ...c.ammoCapacity },
+    destroyed: false,
+  };
+  const st = mechStats(m);
+  m.sections = { ...st.sections };
+  m.ammo = { ...st.ammoCapacity };
+  s.mechs.push(m);
+  return m;
+}
+
+export function getMech(s: CareerState, id: number): MechState | undefined {
+  return s.mechs.find((m) => m.id === id);
+}
+
+export function activeMech(s: CareerState): MechState {
+  return getMech(s, s.activeMechId) ?? s.mechs[0];
+}
+
+/** Display name: chassis name plus a number when you own several of the same chassis. */
+export function mechName(s: CareerState, m: MechState): string {
+  const same = s.mechs.filter((x) => x.chassis === m.chassis);
+  const name = CHASSIS[m.chassis].name;
+  return same.length > 1 ? `${name} ${same.indexOf(m) + 1}` : name;
+}
+
+/** Backups that can actually deploy, in drop order. */
+export function backups(s: CareerState): MechState[] {
+  return s.backupIds
+    .map((id) => getMech(s, id))
+    .filter((m): m is MechState => !!m && m.id !== s.activeMechId)
+    .slice(0, ECONOMY.maxBackups);
+}
+
+export function setActive(s: CareerState, id: number): void {
+  if (!getMech(s, id)) return;
+  s.activeMechId = id;
+  s.backupIds = s.backupIds.filter((b) => b !== id);
+}
+
+/** Add or remove a mech from the backup list (up to `maxBackups`). */
+export function toggleBackup(s: CareerState, id: number): void {
+  if (id === s.activeMechId || !getMech(s, id)) return;
+  if (s.backupIds.includes(id)) s.backupIds = s.backupIds.filter((b) => b !== id);
+  else if (s.backupIds.length < ECONOMY.maxBackups) s.backupIds.push(id);
+}
+
+export function chassisPrice(s: CareerState, chassisId: string): number {
+  return price(s, CHASSIS[chassisId].price);
+}
+
+export function buyChassis(s: CareerState, chassisId: string): MechState | null {
+  if (!CHASSIS_ORDER.includes(chassisId)) return null;
+  const cost = chassisPrice(s, chassisId);
+  if (cost > s.money) return null;
+  spend(s, cost);
+  return addMech(s, chassisId);
+}
+
+/** What selling a mech pays: a share of its value, less for damage (or destroyed). */
+export function mechSellValue(s: CareerState, m: MechState): number {
+  const value = price(s, mechValue(m)) * ECONOMY.sellFraction;
+  if (m.destroyed) return Math.round(value * 0.25);
+  return Math.max(0, Math.round(value - totalRepairCost(s, m)));
+}
+
+/** Sell a mech (never the last one). Its weapons and equipment go with it. */
+export function sellMech(s: CareerState, id: number): boolean {
+  const m = getMech(s, id);
+  if (!m || s.mechs.length <= 1) return false;
+  earn(s, mechSellValue(s, m));
+  s.mechs = s.mechs.filter((x) => x.id !== id);
+  s.backupIds = s.backupIds.filter((b) => b !== id);
+  if (s.activeMechId === id) s.activeMechId = s.mechs[0].id;
+  return true;
 }
 
 // ---------- Mech and loadout ----------
@@ -149,15 +242,14 @@ export function mechValue(m: MechState): number {
 }
 
 /** Keep armor and ammo within the current loadout's limits (after removing plating or bins). */
-export function normalizeMech(s: CareerState): void {
-  const st = mechStats(s.mech);
-  for (const sec of SECTIONS) s.mech.sections[sec] = Math.min(s.mech.sections[sec], st.sections[sec]);
-  s.mech.ammo.ballistic = Math.min(s.mech.ammo.ballistic, st.ammoCapacity.ballistic);
-  s.mech.ammo.missile = Math.min(s.mech.ammo.missile ?? 0, st.ammoCapacity.missile);
+export function normalizeMech(m: MechState): void {
+  const st = mechStats(m);
+  for (const sec of SECTIONS) m.sections[sec] = Math.min(m.sections[sec], st.sections[sec]);
+  m.ammo.ballistic = Math.min(m.ammo.ballistic, st.ammoCapacity.ballistic);
+  m.ammo.missile = Math.min(m.ammo.missile ?? 0, st.ammoCapacity.missile);
 }
 
-export function sectionRepairCost(s: CareerState, section: Section): number {
-  const m = s.mech;
+export function sectionRepairCost(s: CareerState, m: MechState, section: Section): number {
   const max = mechStats(m).sections[section];
   const missing = max - m.sections[section];
   if (missing <= 0) return 0;
@@ -165,35 +257,35 @@ export function sectionRepairCost(s: CareerState, section: Section): number {
   return price(s, missing * ECONOMY.repairPerArmor * mult);
 }
 
-export function totalRepairCost(s: CareerState): number {
-  return SECTIONS.reduce((t, sec) => t + sectionRepairCost(s, sec), 0);
+export function totalRepairCost(s: CareerState, m: MechState): number {
+  return SECTIONS.reduce((t, sec) => t + sectionRepairCost(s, m, sec), 0);
 }
 
-export function repairSection(s: CareerState, section: Section): boolean {
-  const cost = sectionRepairCost(s, section);
-  if (cost === 0 || cost > s.money || s.mech.destroyed) return false;
+export function repairSection(s: CareerState, m: MechState, section: Section): boolean {
+  const cost = sectionRepairCost(s, m, section);
+  if (cost === 0 || cost > s.money || m.destroyed) return false;
   spend(s, cost);
-  s.mech.sections[section] = mechStats(s.mech).sections[section];
+  m.sections[section] = mechStats(m).sections[section];
   return true;
 }
 
-export function repairAll(s: CareerState): boolean {
-  const cost = totalRepairCost(s);
-  if (cost === 0 || cost > s.money || s.mech.destroyed) return false;
-  for (const sec of SECTIONS) repairSection(s, sec);
+export function repairAll(s: CareerState, m: MechState): boolean {
+  const cost = totalRepairCost(s, m);
+  if (cost === 0 || cost > s.money || m.destroyed) return false;
+  for (const sec of SECTIONS) repairSection(s, m, sec);
   return true;
 }
 
-export function rebuildCost(s: CareerState): number {
-  return price(s, mechValue(s.mech) * ECONOMY.rebuildFraction);
+export function rebuildCost(s: CareerState, m: MechState): number {
+  return price(s, mechValue(m) * ECONOMY.rebuildFraction);
 }
 
-export function rebuild(s: CareerState): boolean {
-  const cost = rebuildCost(s);
-  if (!s.mech.destroyed || cost > s.money) return false;
+export function rebuild(s: CareerState, m: MechState): boolean {
+  const cost = rebuildCost(s, m);
+  if (!m.destroyed || cost > s.money) return false;
   spend(s, cost);
-  s.mech.destroyed = false;
-  s.mech.sections = { ...mechStats(s.mech).sections };
+  m.destroyed = false;
+  m.sections = { ...mechStats(m).sections };
   return true;
 }
 
@@ -216,48 +308,48 @@ export function sellItem(s: CareerState, inventoryIndex: number): boolean {
 }
 
 /** Install owned equipment. A new reactor replaces the old one (which goes to inventory). */
-export function installEquipment(s: CareerState, id: string): boolean {
+export function installEquipment(s: CareerState, m: MechState, id: string): boolean {
   const idx = s.inventory.indexOf(id);
   if (idx < 0 || !isEquipment(id)) return false;
   if (EQUIPMENT[id].kind === 'reactor') {
-    const old = s.mech.equipment.findIndex((e) => EQUIPMENT[e].kind === 'reactor');
-    if (old >= 0) s.inventory.push(...s.mech.equipment.splice(old, 1));
+    const old = m.equipment.findIndex((e) => EQUIPMENT[e].kind === 'reactor');
+    if (old >= 0) s.inventory.push(...m.equipment.splice(old, 1));
   }
   s.inventory.splice(s.inventory.indexOf(id), 1);
-  s.mech.equipment.push(id);
-  normalizeMech(s);
+  m.equipment.push(id);
+  normalizeMech(m);
   return true;
 }
 
-export function removeEquipment(s: CareerState, index: number): void {
-  const id = s.mech.equipment[index];
+export function removeEquipment(s: CareerState, m: MechState, index: number): void {
+  const id = m.equipment[index];
   if (!id) return;
-  s.mech.equipment.splice(index, 1);
+  m.equipment.splice(index, 1);
   s.inventory.push(id);
-  normalizeMech(s);
+  normalizeMech(m);
 }
 
 /** Put an owned weapon in a hardpoint (whatever was there goes back to inventory). */
-export function install(s: CareerState, mountId: string, weaponId: string): boolean {
-  const mount = CHASSIS[s.mech.chassis].mounts.find((m) => m.id === mountId);
+export function install(s: CareerState, m: MechState, mountId: string, weaponId: string): boolean {
+  const mount = CHASSIS[m.chassis].mounts.find((x) => x.id === mountId);
   const idx = s.inventory.indexOf(weaponId);
   if (!mount || idx < 0 || WEAPONS[weaponId].family !== mount.type) return false;
-  uninstall(s, mountId);
-  s.inventory.splice(idx, 1);
-  // New weapons default to group 1 for ballistics, 2 for energy (matches the starter mech).
-  s.mech.weapons.push({ mount: mountId, weapon: weaponId, group: mount.type === 'energy' ? 2 : 1 });
+  uninstall(s, m, mountId);
+  s.inventory.splice(s.inventory.indexOf(weaponId), 1);
+  // New weapons default to group 1 for ballistics, 2 for energy and missiles.
+  m.weapons.push({ mount: mountId, weapon: weaponId, group: mount.type === 'ballistic' ? 1 : 2 });
   return true;
 }
 
-export function uninstall(s: CareerState, mountId: string): void {
-  const i = s.mech.weapons.findIndex((w) => w.mount === mountId);
+export function uninstall(s: CareerState, m: MechState, mountId: string): void {
+  const i = m.weapons.findIndex((w) => w.mount === mountId);
   if (i < 0) return;
-  s.inventory.push(s.mech.weapons[i].weapon);
-  s.mech.weapons.splice(i, 1);
+  s.inventory.push(m.weapons[i].weapon);
+  m.weapons.splice(i, 1);
 }
 
-export function setGroup(s: CareerState, mountId: string, group: 1 | 2): void {
-  const w = s.mech.weapons.find((x) => x.mount === mountId);
+export function setGroup(m: MechState, mountId: string, group: 1 | 2): void {
+  const w = m.weapons.find((x) => x.mount === mountId);
   if (w) w.group = group;
 }
 
@@ -293,7 +385,10 @@ function makeContract(s: CareerState): Contract {
   const pick = <T>(xs: readonly T[]) => xs[Math.floor(Math.random() * xs.length)];
   const employer = pick(EMPLOYERS);
   const enemy = pick(ENEMY_FORCES);
-  const payout = Math.round((t.payout[0] + Math.random() * (t.payout[1] - t.payout[0])) * econ(s).payouts / 500) * 500;
+  const limited = Math.random() < ECONOMY.tonnageLimitChance;
+  const maxTonnage = limited ? pick(ECONOMY.tonnageLimits) : undefined;
+  const base = (t.payout[0] + Math.random() * (t.payout[1] - t.payout[0])) * econ(s).payouts;
+  const payout = Math.round((base * (limited ? 1 + ECONOMY.tonnageLimitPayBonus : 1)) / 500) * 500;
   return {
     id: s.nextContractId++,
     seed: randomSeed(),
@@ -304,6 +399,7 @@ function makeContract(s: CareerState): Contract {
     targets: t.targets,
     payout,
     bonus: makeBonus(t.targets),
+    maxTonnage,
   };
 }
 
@@ -339,41 +435,75 @@ export function bonusPayout(c: Contract): number {
 
 // ---------- Deploying ----------
 
-export function fuelCost(s: CareerState): number {
-  return price(s, tonnage(s.mech) * ECONOMY.fuelPerTon);
+export function fuelCost(s: CareerState, m: MechState): number {
+  return price(s, tonnage(m) * ECONOMY.fuelPerTon);
 }
 
 export type AmmoTarget = { ballistic: number; missile: number };
 
-/** Price of topping ammo up to `target` (leftover ammo is already paid for). */
-export function ammoCost(s: CareerState, target: AmmoTarget): number {
-  const b = Math.max(0, target.ballistic - s.mech.ammo.ballistic);
-  const m = Math.max(0, target.missile - (s.mech.ammo.missile ?? 0));
-  return price(s, b * ECONOMY.ammoPrice.ballistic + m * ECONOMY.ammoPrice.missile);
+/** Price of topping a mech's ammo up to `target` (leftover ammo is already paid for). */
+export function ammoCost(s: CareerState, m: MechState, target: AmmoTarget): number {
+  const b = Math.max(0, target.ballistic - m.ammo.ballistic);
+  const mi = Math.max(0, target.missile - (m.ammo.missile ?? 0));
+  return price(s, b * ECONOMY.ammoPrice.ballistic + mi * ECONOMY.ammoPrice.missile);
 }
 
-/** Why the mech can't deploy right now, or null if it can. */
-export function deployBlocker(s: CareerState, target: AmmoTarget): string | null {
-  if (s.mech.destroyed) return 'Your mech is destroyed. Rebuild it first.';
-  if (s.mech.sections.torso <= 0) return 'Torso destroyed. Repair it first.';
-  const check = checkLoadout(s.mech);
-  if (!check.ok) return check.problems.join('. ');
-  if (fuelCost(s) + ammoCost(s, target) > s.money) return 'Not enough money for fuel and ammo.';
+/** Fuel and ammo for the deployment: the active mech topped up to `target`, backups filled. */
+export function deployCost(s: CareerState, target: AmmoTarget): { fuel: number; ammo: number; backupFuel: number; backupAmmo: number } {
+  const a = activeMech(s);
+  const bs = backups(s);
+  return {
+    fuel: fuelCost(s, a),
+    ammo: ammoCost(s, a, target),
+    backupFuel: bs.reduce((t, m) => t + Math.round(fuelCost(s, m) * ECONOMY.backupFuelFraction), 0),
+    backupAmmo: bs.reduce((t, m) => t + ammoCost(s, m, ammoCapacity(m)), 0),
+  };
+}
+
+/** Why a mech can't go on this contract, or null. */
+export function mechBlocker(m: MechState, contract: Contract | null, label: string): string | null {
+  if (m.destroyed) return `${label} is destroyed. Rebuild it first.`;
+  if (m.sections.torso <= 0) return `${label}'s torso is destroyed. Repair it first.`;
+  const check = checkLoadout(m);
+  if (!check.ok) return `${label}: ${check.problems.join('. ')}`;
+  if (contract?.maxTonnage && tonnage(m) > contract.maxTonnage) {
+    return `${label} weighs ${tonnage(m)} t; this contract allows ${contract.maxTonnage} t.`;
+  }
+  return null;
+}
+
+/** Why the deployment can't go ahead, or null if it can. */
+export function deployBlocker(s: CareerState, contract: Contract, target: AmmoTarget): string | null {
+  const a = activeMech(s);
+  const own = mechBlocker(a, contract, mechName(s, a));
+  if (own) return own;
+  for (const b of backups(s)) {
+    const bb = mechBlocker(b, contract, `Backup ${mechName(s, b)}`);
+    if (bb) return bb;
+  }
+  const c = deployCost(s, target);
+  if (c.fuel + c.ammo + c.backupFuel + c.backupAmmo > s.money) return 'Not enough money for fuel and ammo.';
   return null;
 }
 
 export function deploy(s: CareerState, contractId: number, target: AmmoTarget): MissionConfig | null {
   const contract = s.contracts.find((c) => c.id === contractId);
-  if (!contract || deployBlocker(s, target)) return null;
-  spend(s, fuelCost(s) + ammoCost(s, target));
-  const cap = ammoCapacity(s.mech);
-  s.mech.ammo.ballistic = Math.max(s.mech.ammo.ballistic, Math.min(target.ballistic, cap.ballistic));
-  s.mech.ammo.missile = Math.max(s.mech.ammo.missile ?? 0, Math.min(target.missile, cap.missile));
+  if (!contract || deployBlocker(s, contract, target)) return null;
+  const cost = deployCost(s, target);
+  spend(s, cost.fuel + cost.ammo + cost.backupFuel + cost.backupAmmo);
+  const a = activeMech(s);
+  const cap = ammoCapacity(a);
+  a.ammo.ballistic = Math.max(a.ammo.ballistic, Math.min(target.ballistic, cap.ballistic));
+  a.ammo.missile = Math.max(a.ammo.missile ?? 0, Math.min(target.missile, cap.missile));
+  const bs = backups(s);
+  for (const b of bs) b.ammo = { ...ammoCapacity(b) };
   s.activeContract = contract.id;
   const combat = COMBAT_DIFFICULTY[s.difficulty.combat];
+  const copy = (m: MechState) => JSON.parse(JSON.stringify(m)) as MechState;
   return {
     contract,
-    mech: JSON.parse(JSON.stringify(s.mech)) as MechState,
+    mech: copy(a),
+    backups: bs.map(copy),
     enemyCount: combat.enemyCount * ECONOMY.tiers[contract.tier].enemyCount,
     enemySpread: combat.enemySpread,
     enemyDamage: combat.enemyDamage,
@@ -388,7 +518,10 @@ export function completeMission(s: CareerState, contract: Contract, outcome: Mis
   const before = s.money;
   s.activeContract = null;
   s.stats.missions++;
-  s.mech = outcome.mech;
+  for (const m of outcome.mechs) {
+    const i = s.mechs.findIndex((x) => x.id === m.id);
+    if (i >= 0) s.mechs[i] = m;
+  }
 
   if (outcome.won) {
     s.stats.wins++;
@@ -402,7 +535,10 @@ export function completeMission(s: CareerState, contract: Contract, outcome: Mis
   } else {
     lines.push({ label: outcome.withdrew ? 'Withdrew: no payment' : 'Mission failed: no payment', amount: 0 });
   }
-  if (s.mech.destroyed) notes.push('Your mech was destroyed. Rebuild it in the Mech tab before your next deployment.');
+  const lost = outcome.mechs.filter((m) => m.destroyed);
+  if (lost.length > 0) {
+    notes.push(`Destroyed: ${lost.map((m) => mechName(s, m)).join(', ')}. Rebuild in the Mech tab, or field another mech.`);
+  }
 
   // Loan installment comes due after every mission.
   if (s.loan) {
@@ -442,25 +578,26 @@ function autoSell(s: CareerState, needed: number, notes: string[]): void {
   if (sold.length > 0) notes.push(`Sold to cover the loan: ${sold.join(', ')}.`);
 }
 
-/** Money you could raise by selling spare gear. */
+/** Money you could raise by selling spare gear and every mech you aren't fielding. */
 export function sellableValue(s: CareerState): number {
-  return s.inventory.reduce((t, id) => t + sellPrice(s, id), 0);
+  const spareMechs = s.mechs.filter((m) => m.id !== s.activeMechId).reduce((t, m) => t + mechSellValue(s, m), 0);
+  return s.inventory.reduce((t, id) => t + sellPrice(s, id), 0) + spareMechs;
 }
 
 /**
- * The career ends when you can't get back into the field: the mech is
- * destroyed or you can't afford fuel, you can't cover it by selling gear,
- * and you already have a loan.
+ * The career ends when you can't get back into the field: no mech can deploy
+ * and you can't afford to rebuild one (or fuel one), even after selling spare
+ * gear and mechs, and you already have a loan.
  */
 export function checkCareerOver(s: CareerState): void {
   if (s.over) return;
-  const funds = s.money + sellableValue(s);
-  const need = s.mech.destroyed ? rebuildCost(s) : fuelCost(s);
-  if (funds >= need || !s.loan) return;
+  const ready = s.mechs.filter((m) => !m.destroyed);
+  const need = ready.length > 0 ? Math.min(...ready.map((m) => fuelCost(s, m))) : Math.min(...s.mechs.map((m) => rebuildCost(s, m)));
+  if (s.money + sellableValue(s) >= need || !s.loan) return;
   bankrupt(
     s,
-    s.mech.destroyed
-      ? "Your last mech was destroyed, you can't afford to rebuild it, and you already owe a loan."
+    ready.length === 0
+      ? "Your mechs are destroyed, you can't afford to rebuild one, and you already owe a loan."
       : "You can't afford to deploy, have nothing left to sell, and already owe a loan.",
   );
 }
@@ -474,9 +611,10 @@ function bankrupt(s: CareerState, reason: string): void {
   }
   s.loan = null;
   s.money = Math.max(s.money, 0);
-  s.mech.destroyed = false;
-  s.mech.sections = { ...mechStats(s.mech).sections };
-  s.overReason = `Emergency bailout: ${reason} Your debt was cleared and your mech restored.`;
+  const a = activeMech(s);
+  a.destroyed = false;
+  a.sections = { ...mechStats(a).sections };
+  s.overReason = `Emergency bailout: ${reason} Your debt was cleared and your active mech restored.`;
 }
 
 function spend(s: CareerState, amount: number): void {
