@@ -25,14 +25,23 @@ import { Enemy, Structure, Tank, Turret, createEnemy, type AiContext } from '../
 import { NavGrid } from '../game/world/NavGrid';
 import { FogOverlay } from '../game/world/Fog';
 import { drawTerrain, terrainStage } from '../game/world/terrainArt';
-import { generateDestroyTargets, type MissionMap } from '../game/world/mapgen';
+import { STATION_RADIUS, generateDestroyTargets, type MissionMap, type StationType } from '../game/world/mapgen';
 import type { MechState, MissionConfig, MissionOutcome } from '../career/types';
 import { newCareer } from '../career/career';
 
 /** Mission config for quick dev runs without a career (?quick). */
 function quickConfig(seed: number): MissionConfig {
   const c = newCareer('normal', 'normal');
-  return { contract: { ...c.contracts[0], seed }, mech: c.mechs[0], backups: [], enemyCount: 1, enemySpread: 1, enemyDamage: 1 };
+  return {
+    contract: { ...c.contracts[0], seed },
+    mech: c.mechs[0],
+    backups: [],
+    funds: c.money,
+    fieldPrices: { repairPerArmor: 80, ammoBallistic: 12, ammoMissile: 60, swapFee: 8000 },
+    enemyCount: 1,
+    enemySpread: 1,
+    enemyDamage: 1,
+  };
 }
 
 /** Live movement numbers: the tuning panel edits this, and it survives mission restarts. */
@@ -93,6 +102,10 @@ export class MapScene extends Phaser.Scene {
   /** Seconds until the next backup lands (0 = none dropping). */
   private dropTimer = 0;
   private sectionLost = false;
+  private stations: Station[] = [];
+  private fieldCosts: { label: string; amount: number }[] = [];
+  private funds = 0;
+  private prevInteract = false;
   private fog?: FogOverlay;
   private visionTimer = 0;
   /** Dev toggle: fog of war off shows every enemy. */
@@ -140,6 +153,14 @@ export class MapScene extends Phaser.Scene {
     this.backupQueue = [...cfg.backups];
     this.dropTimer = 0;
     this.sectionLost = false;
+    this.funds = cfg.funds;
+    this.fieldCosts = [];
+    this.prevInteract = false;
+    this.stations = m.stations.map((st) => ({
+      ...st,
+      used: false,
+      img: this.add.image(st.x, st.y, `station-${st.type}`).setScale(1 / ART_SCALE).setDepth(1.5),
+    }));
     for (const p of [...m.targets, ...m.turrets, ...m.tanks]) {
       this.enemies.push(createEnemy(this, p.type, p.x, p.y, p.angle, p.home));
     }
@@ -228,6 +249,7 @@ export class MapScene extends Phaser.Scene {
     this.combat.listenerX = p.x;
     this.combat.listenerY = p.y;
     this.combat.update(dt);
+    this.updateStations();
     this.updateVision(dt);
     this.emitDamageSmoke(dt);
     this.fx.update(dt);
@@ -549,6 +571,7 @@ export class MapScene extends Phaser.Scene {
         ammoUsed: sum((m) => m.stats.ammoUsed),
         mechs: [...this.deployed.map((m) => m.toState()), ...this.backupQueue],
         backupsUsed: this.deployed.length - 1,
+        fieldCosts: this.fieldCosts,
       };
       this.game.events.emit('mission-end', outcome);
     }
@@ -575,6 +598,77 @@ export class MapScene extends Phaser.Scene {
         usesMissiles: live.some((w) => w.def.ammoPerShot > 0 && w.def.family === 'missile'),
       };
     });
+  }
+
+  /** What the station the mech is standing on offers right now (cost, or why not). */
+  private stationOffer(st: Station): { label: string; cost: number; reason: string } {
+    const p = this.player;
+    const P = this.config.fieldPrices;
+    if (st.used) return { label: 'Station', cost: 0, reason: 'already used' };
+    if (st.type === 'ammo') {
+      const cap = p.loadout.ammoCapacity;
+      const cost = Math.round((cap.ballistic - p.ammo.ballistic) * P.ammoBallistic + (cap.missile - p.ammo.missile) * P.ammoMissile);
+      return { label: 'Resupply ammo', cost, reason: cost === 0 ? 'Ammo is full' : '' };
+    }
+    if (st.type === 'repair') {
+      let missing = 0;
+      for (const sec of SECTIONS) if (!p.sections.destroyed(sec)) missing += p.sections.max[sec] - p.sections.hp[sec];
+      const cost = Math.round(missing * P.repairPerArmor);
+      return { label: 'Patch armor', cost, reason: cost === 0 ? 'Nothing to patch (destroyed sections need the hangar)' : '' };
+    }
+    const next = this.backupQueue[0];
+    if (!next) return { label: 'Swap mech', cost: P.swapFee, reason: 'No backup on the ship' };
+    return { label: `Swap for backup ${CHASSIS[next.chassis].name}`, cost: P.swapFee, reason: '' };
+  }
+
+  /** Field stations: show what's on offer while standing on one, and use it on interact. */
+  private updateStations(): void {
+    const p = this.player;
+    const st = p.alive ? this.stations.find((x) => Math.hypot(x.x - p.x, x.y - p.y) < STATION_RADIUS) : undefined;
+    const pressed = actions.interact && !this.prevInteract;
+    this.prevInteract = actions.interact;
+    touchButtons.interact.visible = !!st && this.state === 'active';
+    if (!st) {
+      hud.interactPrompt = '';
+      return;
+    }
+    const offer = this.stationOffer(st);
+    const left = this.funds - this.fieldCosts.reduce((t, f) => t + f.amount, 0);
+    const reason = offer.reason || (offer.cost > left ? `Not enough money (${moneyText(left)} left)` : '');
+    hud.interactPrompt = reason ? `${offer.label}: ${reason}` : `${offer.label}  ${moneyText(offer.cost)}`;
+    hud.interactReady = !reason;
+    if (!pressed || reason || this.state !== 'active') return;
+    this.fieldCosts.push({ label: `Field: ${offer.label}`, amount: offer.cost });
+    st.used = true;
+    st.img.setTexture('station-used');
+    play('ui', 1);
+    if (st.type === 'ammo') {
+      p.ammo = { ...p.loadout.ammoCapacity };
+    } else if (st.type === 'repair') {
+      for (const sec of SECTIONS) if (!p.sections.destroyed(sec)) p.sections.hp[sec] = p.sections.max[sec];
+      p.updateLegs();
+    } else {
+      this.swapToBackup(st);
+    }
+    this.fx.flareBurst(st.x, st.y);
+  }
+
+  /** Swap station: the current mech is airlifted home as it is; the backup lands on the pad. */
+  private swapToBackup(st: Station): void {
+    const state = this.backupQueue.shift();
+    if (!state) return;
+    const old = this.player;
+    old.airlift();
+    this.player = new PlayerMech(this, state, this.movement, st.x, st.y, old.motor.torsoAngle);
+    this.deployed.push(this.player);
+    this.units[this.units.indexOf(old)] = this.player;
+    this.rebuildBodies();
+    this.attachPlayer();
+    hud.backups = this.backupQueue.length;
+    this.fx.explosion(st.x, st.y, 1);
+    play('collapse', 0.8);
+    hud.briefing = `${CHASSIS[old.chassis.id].name} airlifted out. ${CHASSIS[state.chassis].name} deployed.`;
+    this.briefingUntil = this.elapsed + 3;
   }
 
   /** Hook up everything that follows the player's mech (start of mission, and each backup drop). */
@@ -722,6 +816,8 @@ export class MapScene extends Phaser.Scene {
     }
     if (this.elapsed > this.briefingUntil) hud.briefing = '';
     if (this.evac) hud.targets.push(this.evac);
+    hud.stations.length = 0;
+    for (const st of this.stations) if (!st.used) hud.stations.push(st);
     this.evacImg?.setRotation(this.elapsed * 0.6);
     hud.bonusState = this.bonusState();
     if (this.config.contract.bonus.kind === 'fast' && hud.bonusState === 'open') {
@@ -823,6 +919,18 @@ export class MapScene extends Phaser.Scene {
     const view = small ? DISPLAY.viewShortAxisSmall : DISPLAY.viewShortAxis;
     cam.setZoom(clamp(Math.min(Viewport.width, Viewport.height) / view, 0.1, 10));
   }
+}
+
+interface Station {
+  type: StationType;
+  x: number;
+  y: number;
+  used: boolean;
+  img: Phaser.GameObjects.Image;
+}
+
+function moneyText(n: number): string {
+  return `¢${Math.max(0, Math.round(n)).toLocaleString('en-US')}`;
 }
 
 /** Tanks crush terrain up to this tonnage (keep in line with `crushTonnage` in data/enemies.ts). */

@@ -62,8 +62,10 @@ export interface ButtonView {
   visible: boolean;
 }
 
-export const touchButtons: { swap: ButtonView; equip1: ButtonView; equip2: ButtonView } = {
+export const touchButtons: { swap: ButtonView; equip1: ButtonView; equip2: ButtonView; interact: ButtonView } = {
   swap: { x: 0, y: 0, pressed: false, visible: true },
+  /** Only shown while standing at a field station. */
+  interact: { x: 0, y: 0, pressed: false, visible: false },
   equip1: { x: 0, y: 0, pressed: false, visible: false },
   equip2: { x: 0, y: 0, pressed: false, visible: false },
 };

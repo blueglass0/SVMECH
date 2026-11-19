@@ -3,6 +3,7 @@ import { Rng } from '../../core/rng';
 import type { Vec } from '../../core/math';
 import { DESTROY_TARGETS } from '../../data/missions';
 import type { CombatDifficulty } from '../../data/difficulty';
+import { ECONOMY } from '../../data/economy';
 
 export interface Placement {
   type: string;
@@ -22,7 +23,13 @@ export interface MissionMap {
   targets: Placement[];
   turrets: Placement[];
   tanks: Placement[];
+  /** Field stations: ammo depot, repair bay, swap station. */
+  stations: { type: StationType; x: number; y: number }[];
 }
+
+export type StationType = 'ammo' | 'repair' | 'swap';
+/** Stations need this much open ground around them. */
+export const STATION_RADIUS = 70;
 
 type Box = [number, number, number, number];
 
@@ -52,11 +59,14 @@ export function generateDestroyTargets(seed: number, difficulty: CombatDifficult
   }
 
   const obstacles: Obstacle[] = [];
+  // Field stations are placed after the main solids; anything placed later keeps clear of them.
+  const stations: MissionMap['stations'] = [];
   const keepClear = (o: Obstacle): boolean => {
     const b = box(o);
     if (b[0] < gap || b[1] < gap || b[2] > W - gap || b[3] > H - gap) return false;
     if (boxCircleDistance(b, spawn) < T.spawnClearance) return false;
     if (sites.some((s) => boxCircleDistance(b, s) < 260)) return false;
+    if (stations.some((s) => boxCircleDistance(b, s) < STATION_RADIUS + 30)) return false;
     return obstacles.every((other) => separation(o, other) >= gap);
   };
   const tryAdd = (o: Obstacle): boolean => {
@@ -125,6 +135,19 @@ export function generateDestroyTargets(seed: number, difficulty: CombatDifficult
     });
   }
 
+  // Field stations: in the open, away from the drop point, the bases and each other.
+  const F = ECONOMY.field;
+  for (let n = rng.int(F.stationsPerMap[0], F.stationsPerMap[1]); n > 0; n--) {
+    for (let attempt = 0; attempt < 80; attempt++) {
+      const p = { x: rng.range(300, W - 300), y: rng.range(300, H - 300) };
+      if (dist(p, spawn) < 700 || sites.some((s) => dist(s, p) < 600) || stations.some((s) => dist(s, p) < 900)) continue;
+      if (obstacles.some((o) => boxCircleDistance(box(o), p) < STATION_RADIUS + 30)) continue;
+      const type: StationType = rng.next() < F.swapChance ? 'swap' : rng.next() < 0.5 ? 'ammo' : 'repair';
+      stations.push({ type, ...p });
+      break;
+    }
+  }
+
   // Props: trees, fences and sheds. Everything can crush them, so they don't need the gap rule;
   // they just mustn't overlap solid obstacles, the drop point or the bases.
   const solids = obstacles.length;
@@ -133,6 +156,7 @@ export function generateDestroyTargets(seed: number, difficulty: CombatDifficult
     if (b[0] < 20 || b[1] < 20 || b[2] > W - 20 || b[3] > H - 20) return false;
     if (boxCircleDistance(b, spawn) < 200) return false;
     if (sites.some((s) => boxCircleDistance(b, s) < 230)) return false;
+    if (stations.some((s) => boxCircleDistance(b, s) < STATION_RADIUS + 20)) return false;
     for (let i = 0; i < obstacles.length; i++) if (separation(o, obstacles[i]) < (i < solids ? 10 : 4)) return false;
     return true;
   };
@@ -198,7 +222,8 @@ export function generateDestroyTargets(seed: number, difficulty: CombatDifficult
     p.x < W - r - 20 &&
     p.y < H - r - 20 &&
     obstacles.every((o) => boxCircleDistance(box(o), p) > r + 20) &&
-    [...turrets, ...targets, ...tanks].every((u) => dist(u, p) > 120);
+    [...turrets, ...targets, ...tanks].every((u) => dist(u, p) > 120) &&
+    stations.every((s) => dist(s, p) > 300);
   const placeTank = (near: Vec, spread: number, home: Vec) => {
     for (let attempt = 0; attempt < 60; attempt++) {
       const p = { x: near.x + rng.range(-spread, spread), y: near.y + rng.range(-spread, spread) };
@@ -215,7 +240,7 @@ export function generateDestroyTargets(seed: number, difficulty: CombatDifficult
     placeTank(p, 200, p);
   }
 
-  return { seed, width: W, height: H, obstacles, spawn, targets, turrets, tanks };
+  return { seed, width: W, height: H, obstacles, spawn, targets, turrets, tanks, stations };
 }
 
 function pickWeighted(rng: Rng, items: readonly { type: string; weight: number }[]): string {

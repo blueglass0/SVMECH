@@ -4,9 +4,9 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 
 ## Current milestone
 
-**Milestone 7 part 1 — Chassis, hangar, backups, tonnage limits: built, awaiting the user's
-playtest.** M1–M6b signed off. M7 part 2 (next): swap stations, field ammo/repair stations,
-and the interact action (F on PC, a phone button).
+**Milestone 7 part 2 — Field stations, swap stations, interact: built, awaiting the user's
+playtest.** M1–M7 part 1 signed off. Next by plan: 8 (enemies and weapons: drones, enemy
+mechs, the rest of the weapons incl. continuous-beam lasers).
 Deferred by the user: line-of-sight shadow rendering (logic already hides enemies behind
 walls); revisit as a graphics option, likely in M11.
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
@@ -20,6 +20,8 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   isn't tiny. PC view size is approved as is.
 - **Tonnage-limited contracts and field ammo/repair stations** were requested after M5; they
   belong with M7 (multiple chassis, interact action). See `docs/PLAN.md`.
+- **One backup per mission** (user decision after M7 part 1): `ECONOMY.maxBackups = 1`; choosing
+  another backup replaces the current one.
 - **Chassis feel:** heavier chassis get lower turn rates and more momentum (lower accel/decel),
   lights turn and accelerate quicker. The movement numbers in `chassis.ts` are enough to make
   chassis feel distinct (user-approved, M2).
@@ -216,6 +218,20 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   afford, even selling spares and reserve mechs, with a loan already taken.
 - Terrain tweak (after 6b): light buildings (240 HP), sandbags (110 HP, crush 60), barriers
   crush 70; crushing slows by `0.3 × drag × 50/tonnage`.
+
+## Field station notes (M7 part 2)
+
+- Map gen places 1–2 stations per map (`MissionMap.stations`, `STATION_RADIUS` 70): ammo depot,
+  repair bay, or swap station (35%). In the open, ≥700 from the drop point, ≥600 from bases,
+  ≥900 apart; solids and props keep clear of them; validated reachable over 200 seeds.
+- Interact: F on PC (`actions.interact`); on phones a USE button appears next to the right stick
+  only while standing on a station (`touchButtons.interact.visible`). HUD prompt shows the offer
+  and price; cyan edge arrows point to unused stations.
+- Services are one use per station, priced at `ECONOMY.field.markup` (1.5×) hangar prices, paid
+  from the money you had at deploy (`MissionConfig.funds`, `fieldPrices`); spending comes back in
+  `MissionOutcome.fieldCosts` and shows as debrief lines. Ammo: full refill. Repair: restores
+  every section that isn't destroyed. Swap (fee 8k): the current mech is airlifted home as it is
+  (`PlayerMech.airlift`) and the backup lands on the pad.
 
 ## Conventions
 

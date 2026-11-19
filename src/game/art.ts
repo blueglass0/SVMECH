@@ -281,6 +281,39 @@ export function bakeCombatArt(scene: Phaser.Scene): void {
     }
   });
 
+  // Field stations: a landing pad with an icon. Used ones go grey.
+  const pad = (key: string, color: number, icon: (g: Phaser.GameObjects.Graphics) => void) =>
+    bake(scene, key, 150, 150, (g) => {
+      g.fillStyle(0x1a2026, 0.95).fillCircle(0, 0, 64);
+      g.lineStyle(4, color, 0.9).strokeCircle(0, 0, 64);
+      g.lineStyle(2, color, 0.4).strokeCircle(0, 0, 50);
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        g.lineStyle(3, color, 0.6).lineBetween(Math.cos(a) * 54, Math.sin(a) * 54, Math.cos(a) * 62, Math.sin(a) * 62);
+      }
+      g.fillStyle(color, 0.95);
+      icon(g);
+    });
+  pad('station-ammo', 0xffc561, (g) => {
+    for (const x of [-14, 0, 14]) {
+      g.fillRoundedRect(x - 4, -10, 8, 24, 3);
+      g.fillTriangle(x - 4, -10, x + 4, -10, x, -20);
+    }
+  });
+  pad('station-repair', 0x8fd16a, (g) => {
+    g.fillRect(-6, -20, 12, 40);
+    g.fillRect(-20, -6, 40, 12);
+  });
+  pad('station-swap', 0x7fe6ff, (g) => {
+    g.fillRect(-18, -11, 26, 6);
+    g.fillTriangle(8, -16, 20, -8, 8, 0);
+    g.fillRect(-8, 5, 26, 6);
+    g.fillTriangle(-8, 0, -20, 8, -8, 16);
+  });
+  pad('station-used', 0x56616b, (g) => {
+    g.fillRect(-16, -3, 32, 6);
+  });
+
   // Fog of war: last-seen marker and radar blip.
   bake(scene, 'ghost', 40, 40, (g) => {
     g.lineStyle(2.5, 0xff5a4f, 0.9);
@@ -350,6 +383,16 @@ export function bakeCombatArt(scene: Phaser.Scene): void {
     (g) => {
       g.fillStyle(0xe8a33d).fillTriangle(12, 0, -6, -9, -6, 9);
       g.lineStyle(2, 0x0b0e11, 0.8).strokeTriangle(12, 0, -6, -9, -6, 9);
+    },
+    3,
+  );
+  bake(
+    scene,
+    'edge-station',
+    22,
+    22,
+    (g) => {
+      g.fillStyle(0x7fe6ff, 0.9).fillTriangle(8, 0, -4, -6, -4, 6);
     },
     3,
   );

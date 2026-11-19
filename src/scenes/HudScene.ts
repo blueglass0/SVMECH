@@ -61,8 +61,12 @@ export class HudScene extends Phaser.Scene {
   private stickImages: { base: Img; knob: Img; view: StickView }[] = [];
   private fire2!: { img: Img; label: Txt };
   private equipButtons: { img: Img; label: Txt }[] = [];
+  private interactBtn!: { img: Img; label: Txt };
+  private interactText!: Txt;
+  private stationArrows: Img[] = [];
   private equipText!: Txt;
   private layoutEquipCount = -1;
+  private panelTop = 0;
   private shown: Record<string, string> = {};
   private textTimer = 0;
   private debugTimer = 0;
@@ -140,6 +144,20 @@ export class HudScene extends Phaser.Scene {
       img: this.add.image(0, 0, 'button').setScale((CONTROLS.equipButtonRadius / 40) / HUD_ART_SCALE),
       label: this.addText(0, 0, '', { fontFamily: FONT, fontSize: '10px', fontStyle: 'bold', color: '#d6dde3', align: 'center' }).setOrigin(0.5),
     }));
+    this.interactBtn = {
+      img: this.add.image(0, 0, 'button').setScale((CONTROLS.equipButtonRadius / 40) / HUD_ART_SCALE),
+      label: this.addText(0, 0, 'USE', { fontFamily: FONT, fontSize: '11px', fontStyle: 'bold', color: '#8fd16a' }).setOrigin(0.5),
+    };
+    this.interactText = this.addText(0, 0, '', {
+      fontFamily: FONT,
+      fontSize: '13px',
+      fontStyle: 'bold',
+      color: '#8fd16a',
+      backgroundColor: '#0b0e11cc',
+      padding: { x: 10, y: 5 },
+    }).setOrigin(0.5, 1);
+    this.stationArrows = [];
+    for (let i = 0; i < 4; i++) this.stationArrows.push(this.add.image(0, 0, 'edge-station').setScale(1 / HUD_ART_SCALE).setVisible(false));
     this.equipText = this.addText(0, 0, '', { fontFamily: FONT, fontSize: '11px', fontStyle: 'bold', color: '#7fe6ff' });
     this.fire2 = {
       img: this.add.image(0, 0, 'button').setScale((CONTROLS.buttonRadius / 40) / HUD_ART_SCALE),
@@ -190,6 +208,13 @@ export class HudScene extends Phaser.Scene {
       if (st) this.setTextIfChanged(ui.label, 'eqb' + i, st.label.replace(' ', '\n'));
     });
     if (hud.equipment.length !== this.layoutEquipCount) this.layout();
+    const ib = touchButtons.interact;
+    this.interactBtn.img.setVisible(touch && ib.visible).setPosition(ib.x, ib.y).setAlpha(ib.pressed ? 1 : hud.interactReady ? 0.8 : 0.35);
+    this.interactBtn.label.setVisible(touch && ib.visible).setPosition(ib.x, ib.y);
+    // Station prompt just above the status panel.
+    const prompt = hud.interactPrompt ? (touch ? hud.interactPrompt : `F  ${hud.interactPrompt}`) : '';
+    if (this.setTextIfChanged(this.interactText, 'interact', prompt)) this.interactText.setColor(hud.interactReady ? '#8fd16a' : '#8b98a3');
+    this.interactText.setVisible(prompt !== '').setPosition(w / 2, this.panelTop - 8);
     // On phones, light up the group the right stick fires.
     for (let i = 0; i < this.groupTexts.length; i++) {
       const active = !touch || actions.stickGroup === i + 1;
@@ -241,6 +266,7 @@ export class HudScene extends Phaser.Scene {
     // Off-screen indicators.
     this.placeArrows(this.targetArrows, hud.targets, w, h);
     this.placeArrows(this.threatArrows, hud.threats, w, h);
+    this.placeArrows(this.stationArrows, hud.stations, w, h);
 
     // Slower-changing text, throttled.
     this.textTimer -= delta;
@@ -363,6 +389,7 @@ export class HudScene extends Phaser.Scene {
     this.layoutDevice = actions.device;
     const px = Math.round(w / 2 - PANEL_W / 2);
     const py = Math.round(h - panelH - (actions.device === 'touch' ? 6 : 26));
+    this.panelTop = py;
     this.panelBg.setPosition(px, py).setDisplaySize(PANEL_W, panelH);
     // Silhouette on the left, heat and weapon groups on the right.
     const sx = px + 30;
