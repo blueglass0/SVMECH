@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
+import { bakeArt } from '../game/art';
 
 /**
- * First scene. Later milestones generate vector art into textures here, once,
- * so gameplay scenes draw cheap sprites instead of re-drawing shapes per frame.
+ * First scene. Bakes all vector art into textures once, so gameplay scenes
+ * draw cheap sprites instead of re-drawing shapes every frame.
  */
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -10,6 +11,7 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
+    bakeArt(this);
     this.scene.start('Map');
     this.scene.launch('Hud');
   }

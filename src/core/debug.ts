@@ -4,3 +4,6 @@
  */
 export const DEBUG =
   import.meta.env.DEV || new URLSearchParams(window.location.search).has('debug');
+
+/** Values game scenes publish for the debug overlay to show. */
+export const debugInfo: Record<string, string> = {};
