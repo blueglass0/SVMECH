@@ -81,7 +81,7 @@ export function generateDestroyTargets(seed: number, difficulty: CombatDifficult
         if (rng.next() < 0.2) continue;
         const w = rng.range(110, pitch - gap - 10);
         const h = rng.range(110, pitch - gap - 10);
-        tryAdd({ kind: 'rect', x: ox + c * pitch, y: oy + r * pitch, w, h });
+        tryAdd({ kind: 'rect', x: ox + c * pitch, y: oy + r * pitch, w, h, type: 'building' });
       }
     }
   }
@@ -91,7 +91,7 @@ export function generateDestroyTargets(seed: number, difficulty: CombatDifficult
     const cx = rng.range(300, W - 300);
     const cy = rng.range(300, H - 300);
     for (let n = rng.int(5, 9); n > 0; n--) {
-      place(() => ({ kind: 'circle', x: cx + rng.range(-300, 300), y: cy + rng.range(-300, 300), r: rng.range(28, 85) }));
+      place(() => ({ kind: 'circle', x: cx + rng.range(-300, 300), y: cy + rng.range(-300, 300), r: rng.range(28, 85), type: 'rock' }));
     }
   }
 
@@ -102,7 +102,7 @@ export function generateDestroyTargets(seed: number, difficulty: CombatDifficult
       const thick = rng.range(36, 56);
       const x = rng.range(gap, W - gap - len);
       const y = rng.range(gap, H - gap - len);
-      return rng.next() < 0.5 ? { kind: 'rect', x, y, w: len, h: thick } : { kind: 'rect', x, y, w: thick, h: len };
+      return rng.next() < 0.5 ? { kind: 'rect', x, y, w: len, h: thick, type: 'wall' } : { kind: 'rect', x, y, w: thick, h: len, type: 'wall' };
     });
   }
 
@@ -112,9 +112,52 @@ export function generateDestroyTargets(seed: number, difficulty: CombatDifficult
       const x = rng.range(gap, W - gap);
       const y = rng.range(gap, H - gap);
       return rng.next() < 0.5
-        ? { kind: 'circle', x, y, r: rng.range(25, 50) }
-        : { kind: 'rect', x, y, w: rng.range(60, 140), h: rng.range(40, 100) };
+        ? { kind: 'circle', x, y, r: rng.range(25, 50), type: 'rock' }
+        : { kind: 'rect', x, y, w: rng.range(60, 140), h: rng.range(60, 100), type: 'building' };
     });
+  }
+
+  // Concrete barriers: solid for medium mechs, so they keep the minimum gap like everything above.
+  for (let n = rng.int(M.barriers[0], M.barriers[1]); n > 0; n--) {
+    place(() => {
+      const along = rng.next() < 0.5;
+      return { kind: 'rect', x: rng.range(gap, W - gap), y: rng.range(gap, H - gap), w: along ? 72 : 22, h: along ? 22 : 72, type: 'barrier' };
+    });
+  }
+
+  // Props: trees, fences and sheds. Everything can crush them, so they don't need the gap rule;
+  // they just mustn't overlap solid obstacles, the drop point or the bases.
+  const solids = obstacles.length;
+  const propClear = (o: Obstacle): boolean => {
+    const b = box(o);
+    if (b[0] < 20 || b[1] < 20 || b[2] > W - 20 || b[3] > H - 20) return false;
+    if (boxCircleDistance(b, spawn) < 200) return false;
+    if (sites.some((s) => boxCircleDistance(b, s) < 230)) return false;
+    for (let i = 0; i < obstacles.length; i++) if (separation(o, obstacles[i]) < (i < solids ? 10 : 4)) return false;
+    return true;
+  };
+  const addProp = (o: Obstacle) => {
+    if (propClear(o)) obstacles.push(o);
+  };
+  for (let f = rng.int(M.forests[0], M.forests[1]); f > 0; f--) {
+    const cx = rng.range(200, W - 200);
+    const cy = rng.range(200, H - 200);
+    for (let n = rng.int(10, 20); n > 0; n--) {
+      addProp({ kind: 'circle', x: cx + rng.range(-220, 220), y: cy + rng.range(-220, 220), r: rng.range(13, 22), type: 'tree' });
+    }
+  }
+  for (let n = rng.int(M.fences[0], M.fences[1]); n > 0; n--) {
+    const along = rng.next() < 0.5;
+    let x = rng.range(150, W - 600);
+    let y = rng.range(150, H - 600);
+    for (let k = rng.int(4, 9); k > 0; k--) {
+      if (rng.next() > 0.12) addProp({ kind: 'rect', x, y, w: along ? 46 : 8, h: along ? 8 : 46, type: 'fence' });
+      if (along) x += 50;
+      else y += 50;
+    }
+  }
+  for (let n = rng.int(M.sheds[0], M.sheds[1]); n > 0; n--) {
+    addProp({ kind: 'rect', x: rng.range(100, W - 160), y: rng.range(100, H - 160), w: rng.range(40, 62), h: rng.range(34, 52), type: 'shed' });
   }
 
   // Bases: target in the middle, turrets around it, a little cover.

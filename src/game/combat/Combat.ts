@@ -150,6 +150,7 @@ export class Combat {
       const nx = s.x + s.vx * dt;
       const ny = s.y + s.vy * dt;
       let t = this.world.raycast(s.x, s.y, nx, ny);
+      const wall = this.world.lastHit;
       let hitUnit: Unit | null = null;
       for (const u of this.units) {
         if (!u.alive || u.team === s.team) continue;
@@ -172,7 +173,8 @@ export class Combat {
         const angle = Math.atan2(s.vy, s.vx);
         this.fx.impact(hx, hy, angle, s.big ? 6 : 2);
         if (hitUnit) this.damage(hitUnit, s.damage, s.x, s.y, s.team, hx, hy);
-        else if (s.splashRadius > 0) this.burst(hx, hy, s.splashRadius, s.splashDamage, s.team, null);
+        else if (wall >= 0) this.world.damage(wall, s.damage);
+        if (!hitUnit && s.splashRadius > 0) this.burst(hx, hy, s.splashRadius, s.splashDamage, s.team, null);
         if (s.big) play('hit', this.volumeAt(hx, hy) * 0.8);
         this.kill(s);
         continue;
@@ -210,6 +212,7 @@ export class Combat {
     const ex = x + Math.cos(a) * range;
     const ey = y + Math.sin(a) * range;
     let t = this.world.raycast(x, y, ex, ey);
+    const wall = this.world.lastHit;
     let hitUnit: Unit | null = null;
     for (const u of this.units) {
       if (!u.alive || u.team === team) continue;
@@ -231,6 +234,7 @@ export class Combat {
     const hx = x + Math.cos(a) * len;
     const hy = y + Math.sin(a) * len;
     if (hitUnit) this.damage(hitUnit, damage, x, y, team, hx, hy);
+    else if (wall >= 0) this.world.damage(wall, damage);
     if (t >= 0) this.fx.impact(hx, hy, a, 5);
     this.showBeam(x, y, a, len, 'beam');
     this.fx.muzzle(x, y, a, 0.5);
@@ -298,6 +302,10 @@ export class Combat {
       if (u.takeSplash) u.takeSplash(amount);
       else u.takeDamage(amount, x, y);
       this.onUnitHit?.(u, team, amount);
+    }
+    // Explosives are good at knocking down buildings.
+    for (const i of this.world.obstaclesNear(x, y, radius)) {
+      this.world.damage(i, damage * this.world.terrain[i].splashMultiplier);
     }
   }
 

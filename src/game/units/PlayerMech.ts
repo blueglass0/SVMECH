@@ -90,6 +90,7 @@ export class PlayerMech implements Unit {
     this.sections.hp = { ...state.sections };
     this.ammo = { ...state.ammo };
     this.motor = new MechMotor(movement, this.radius, x, y, angle);
+    this.motor.crushTonnage = this.chassis.tonnage;
     this.view = new MechView(scene, this.motor, true);
     this.weapons = state.weapons.map((w) => ({
       def: WEAPONS[w.weapon],

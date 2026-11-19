@@ -21,21 +21,35 @@ export class NavGrid {
   private heap: number[] = [];
   private f: Float32Array;
 
-  constructor(world: CollisionWorld, clearance: number) {
+  /** `crushTonnage`: obstacles units this heavy crush (props) don't block paths. */
+  constructor(
+    private world: CollisionWorld,
+    private clearance: number,
+    private crushTonnage = 0,
+  ) {
     this.cols = Math.ceil(world.width / CELL);
     this.rows = Math.ceil(world.height / CELL);
     const n = this.cols * this.rows;
     this.blocked = new Uint8Array(n);
-    for (let r = 0; r < this.rows; r++) {
-      for (let c = 0; c < this.cols; c++) {
-        if (world.circleBlocked((c + 0.5) * CELL, (r + 0.5) * CELL, clearance)) this.blocked[r * this.cols + c] = 1;
-      }
-    }
+    this.refresh(0, 0, world.width, world.height);
     this.g = new Float32Array(n);
     this.f = new Float32Array(n);
     this.parent = new Int32Array(n);
     this.seen = new Uint32Array(n);
     this.closed = new Uint32Array(n);
+  }
+
+  /** Recompute walkability in an area (after terrain there is destroyed). */
+  refresh(x0: number, y0: number, x1: number, y1: number): void {
+    const c0 = Math.max(0, Math.floor((x0 - this.clearance) / CELL));
+    const r0 = Math.max(0, Math.floor((y0 - this.clearance) / CELL));
+    const c1 = Math.min(this.cols - 1, Math.floor((x1 + this.clearance) / CELL));
+    const r1 = Math.min(this.rows - 1, Math.floor((y1 + this.clearance) / CELL));
+    for (let r = r0; r <= r1; r++) {
+      for (let c = c0; c <= c1; c++) {
+        this.blocked[r * this.cols + c] = this.world.circleBlocked((c + 0.5) * CELL, (r + 0.5) * CELL, this.clearance, this.crushTonnage) ? 1 : 0;
+      }
+    }
   }
 
   /** Find a path; fills `out` with waypoints (world coords, excluding the start). False if none. */

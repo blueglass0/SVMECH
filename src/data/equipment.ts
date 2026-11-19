@@ -161,7 +161,7 @@ export const EQUIPMENT: Record<string, EquipmentDef> = {
     tonnage: 1,
     power: 2,
     price: 16000,
-    sensors: { range: 140, coneDeg: 15, radar: 0 },
+    sensors: { range: 200, coneDeg: 20, radar: 0 },
   },
   radarArray: {
     id: 'radarArray',
@@ -171,7 +171,7 @@ export const EQUIPMENT: Record<string, EquipmentDef> = {
     tonnage: 2,
     power: 4,
     price: 42000,
-    sensors: { range: 220, coneDeg: 20, radar: 480 },
+    sensors: { range: 280, coneDeg: 28, radar: 620 },
   },
 };
 

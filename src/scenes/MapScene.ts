@@ -6,7 +6,7 @@ import { DESTROY_TARGETS, MISSION_THEME } from '../data/missions';
 import { Viewport } from '../core/viewport';
 import { InputSystem, actions, touchButtons } from '../core/input';
 import { settings } from '../core/settings';
-import { CollisionWorld, type Circle, type Obstacle } from '../core/collision';
+import { CollisionWorld, type Circle } from '../core/collision';
 import { DEG, clamp, smoothing, wrapAngle, type Vec } from '../core/math';
 import { randomSeed } from '../core/rng';
 import { play } from '../core/audio';
@@ -24,6 +24,7 @@ import { PlayerMech } from '../game/units/PlayerMech';
 import { Enemy, Structure, Tank, Turret, createEnemy, type AiContext } from '../game/units/Enemies';
 import { NavGrid } from '../game/world/NavGrid';
 import { FogOverlay } from '../game/world/Fog';
+import { drawTerrain, terrainStage } from '../game/world/terrainArt';
 import { generateDestroyTargets, type MissionMap } from '../game/world/mapgen';
 import type { MissionConfig, MissionOutcome } from '../career/types';
 import { newCareer } from '../career/career';
@@ -41,6 +42,8 @@ const CHUNK = 800;
 const END_DELAY = 1.8;
 /** Reach within this distance of the evac point to finish. */
 const EVAC_RADIUS = 80;
+/** The evac zone opens at least this far from where the mech is. */
+const EVAC_MIN_DISTANCE = 650;
 /** Enemies within this distance of a unit that gets shot join the fight. */
 const ALERT_RADIUS = 650;
 
@@ -62,7 +65,11 @@ export class MapScene extends Phaser.Scene {
   private units: Unit[] = [];
   private bodies: Circle[] = [];
   private ai!: AiContext;
-  private chunks: { g: Phaser.GameObjects.Graphics; x: number; y: number }[] = [];
+  private chunks: { g: Phaser.GameObjects.Graphics; x: number; y: number; items: number[] }[] = [];
+  /** Per obstacle: its chunk and its drawn damage stage (redraw when it changes). */
+  private obstacleChunk: number[] = [];
+  private obstacleStage: number[] = [];
+  private nav!: NavGrid;
   private state: 'active' | 'won' | 'lost' = 'active';
   private endTimer = 0;
   private elapsed = 0;
@@ -113,7 +120,9 @@ export class MapScene extends Phaser.Scene {
     this.map = generateDestroyTargets(this.seed, difficulty, cfg.contract.targets);
     const m = this.map;
     this.world = new CollisionWorld(m.width, m.height, m.obstacles);
-    const nav = new NavGrid(this.world, 34);
+    // Tanks crush props, so props don't block their paths.
+    const nav = (this.nav = new NavGrid(this.world, 34, TANK_CRUSH));
+    this.world.onChange = (i, destroyed, crushed) => this.onTerrainChanged(i, destroyed, crushed);
     this.drawMap();
 
     this.fx = new Effects(this);
@@ -295,25 +304,30 @@ export class MapScene extends Phaser.Scene {
     return best;
   }
 
-  /** Objectives done: open an evac zone a short walk away, preferably away from enemies. */
+  /** Objectives done: open an evac zone a good walk away, preferably away from enemies. */
   private openEvac(): void {
     const p = this.player;
     let best: Vec | null = null;
     let bestScore = -Infinity;
-    for (let i = 0; i < 32; i++) {
-      const a = (i / 32) * Math.PI * 2;
-      const d = 650 + (i % 3) * 120;
-      const x = p.x + Math.cos(a) * d;
-      const y = p.y + Math.sin(a) * d;
-      if (this.world.circleBlocked(x, y, EVAC_RADIUS)) continue;
-      let nearest = 2000;
-      for (const e of this.enemies) if (e.alive) nearest = Math.min(nearest, Math.hypot(e.x - x, e.y - y));
-      if (nearest > bestScore) {
-        bestScore = nearest;
-        best = { x, y };
+    // Rings from EVAC_MIN_DISTANCE outward; points off the map or in obstacles are skipped.
+    for (let ring = 0; ring < 5; ring++) {
+      const d = EVAC_MIN_DISTANCE + ring * 150;
+      for (let i = 0; i < 32; i++) {
+        const a = (i / 32) * Math.PI * 2 + ring * 0.1;
+        const x = p.x + Math.cos(a) * d;
+        const y = p.y + Math.sin(a) * d;
+        if (this.world.circleBlocked(x, y, EVAC_RADIUS)) continue;
+        let nearest = 2000;
+        for (const e of this.enemies) if (e.alive) nearest = Math.min(nearest, Math.hypot(e.x - x, e.y - y));
+        // Prefer away from enemies, and not much further than needed.
+        const score = nearest - ring * 60;
+        if (score > bestScore) {
+          bestScore = score;
+          best = { x, y };
+        }
       }
     }
-    // Fallback: the drop point is always clear.
+    // Practically never needed: the drop point is always clear.
     this.evac = best ?? { x: this.map.spawn.x, y: this.map.spawn.y };
     this.evacImg = this.add.image(this.evac.x, this.evac.y, 'evac').setScale(1 / ART_SCALE).setDepth(2);
     hud.objectiveLabel = 'Reach the evac zone';
@@ -651,21 +665,68 @@ export class MapScene extends Phaser.Scene {
       .setTileScale(1 / ART_SCALE, 1 / ART_SCALE)
       .setDepth(0);
 
-    // Obstacles are drawn once, into one Graphics per map chunk; off-screen chunks are hidden.
+    // Obstacles are drawn into one Graphics per map chunk; off-screen chunks are hidden.
+    // A chunk is redrawn only when one of its obstacles changes damage stage.
     const cols = Math.ceil(m.width / CHUNK);
     const rows = Math.ceil(m.height / CHUNK);
     for (let r = 0; r < rows; r++) {
       for (let col = 0; col < cols; col++) {
-        this.chunks.push({ g: this.add.graphics().setDepth(1), x: col * CHUNK, y: r * CHUNK });
+        this.chunks.push({ g: this.add.graphics().setDepth(1), x: col * CHUNK, y: r * CHUNK, items: [] });
       }
     }
-    for (const o of m.obstacles) {
+    this.obstacleChunk = [];
+    this.obstacleStage = [];
+    m.obstacles.forEach((o, i) => {
       const cx = o.kind === 'rect' ? o.x + o.w / 2 : o.x;
       const cy = o.kind === 'rect' ? o.y + o.h / 2 : o.y;
-      const chunk = this.chunks[Math.min(rows - 1, Math.floor(cy / CHUNK)) * cols + Math.min(cols - 1, Math.floor(cx / CHUNK))];
-      drawObstacle(chunk.g, o);
-    }
+      const ci = Math.min(rows - 1, Math.floor(cy / CHUNK)) * cols + Math.min(cols - 1, Math.floor(cx / CHUNK));
+      this.chunks[ci].items.push(i);
+      this.obstacleChunk.push(ci);
+      this.obstacleStage.push(0);
+    });
+    for (let ci = 0; ci < this.chunks.length; ci++) this.drawChunk(ci);
     this.add.graphics().setDepth(1).lineStyle(6, c.border).strokeRect(0, 0, m.width, m.height);
+  }
+
+  private drawChunk(ci: number): void {
+    const ch = this.chunks[ci];
+    ch.g.clear();
+    // Rubble first, so standing obstacles draw over it.
+    for (const rubble of [true, false]) {
+      for (const i of ch.items) {
+        if (this.obstacleStage[i] >= 3 !== rubble) continue;
+        drawTerrain(ch.g, this.map.obstacles[i], this.world.terrain[i], this.obstacleStage[i], i + this.seed);
+      }
+    }
+  }
+
+  /** Terrain took damage, collapsed or was crushed. */
+  private onTerrainChanged(i: number, destroyed: boolean, crushed: boolean): void {
+    const w = this.world;
+    const stage = terrainStage(w.hp[i], w.terrain[i].hp, !destroyed);
+    if (stage !== this.obstacleStage[i]) {
+      this.obstacleStage[i] = stage;
+      this.drawChunk(this.obstacleChunk[i]);
+    }
+    if (!destroyed) return;
+    const o = this.map.obstacles[i];
+    const [x0, y0, x1, y1] = o.kind === 'rect' ? [o.x, o.y, o.x + o.w, o.y + o.h] : [o.x - o.r, o.y - o.r, o.x + o.r, o.y + o.r];
+    const cx = (x0 + x1) / 2;
+    const cy = (y0 + y1) / 2;
+    const size = Math.max(x1 - x0, y1 - y0);
+    if (crushed) {
+      this.fx.impact(cx, cy, Math.random() * Math.PI * 2, 4);
+      play('crunch', this.combat.volumeAt(cx, cy));
+    } else {
+      // Collapse: dust and debris scaled to the size of what fell.
+      this.fx.explosion(cx, cy, Math.min(2, 0.4 + size / 200));
+      for (let k = 0; k < Math.min(5, size / 60); k++) {
+        this.fx.puff(x0 + Math.random() * (x1 - x0), y0 + Math.random() * (y1 - y0), true);
+      }
+      play(size > 90 ? 'collapse' : 'crunch', this.combat.volumeAt(cx, cy));
+    }
+    // Paths open up where solid terrain fell (props never blocked tanks).
+    if (w.terrain[i].crush > TANK_CRUSH) this.nav.refresh(x0, y0, x1, y1);
   }
 
   private cullChunks(cam: Phaser.Cameras.Scene2D.Camera): void {
@@ -689,19 +750,5 @@ export class MapScene extends Phaser.Scene {
   }
 }
 
-function drawObstacle(g: Phaser.GameObjects.Graphics, o: Obstacle): void {
-  const c = MISSION_THEME;
-  if (o.kind === 'circle') {
-    g.fillStyle(c.rock).fillCircle(o.x, o.y, o.r);
-    g.lineStyle(3, c.rockEdge).strokeCircle(o.x, o.y, o.r);
-    return;
-  }
-  const thin = Math.min(o.w, o.h) < 60;
-  g.fillStyle(thin ? c.wall : c.building).fillRect(o.x, o.y, o.w, o.h);
-  g.lineStyle(3, thin ? c.wallEdge : c.buildingEdge).strokeRect(o.x, o.y, o.w, o.h);
-  if (!thin) {
-    // Roof detail so buildings read as solid blocks.
-    const inset = Math.min(14, o.w / 4, o.h / 4);
-    g.lineStyle(1.5, c.buildingEdge, 0.5).strokeRect(o.x + inset, o.y + inset, o.w - inset * 2, o.h - inset * 2);
-  }
-}
+/** Tanks crush terrain up to this tonnage (keep in line with `crushTonnage` in data/enemies.ts). */
+const TANK_CRUSH = 35;
