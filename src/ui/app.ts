@@ -4,6 +4,9 @@ import type { CareerState, CombatLevel, Contract, Debrief, MissionOutcome } from
 import { CHASSIS, type Section } from '../data/chassis';
 import { ECONOMY, SHOP_STOCK } from '../data/economy';
 import { WEAPONS, type WeaponDef } from '../data/weapons';
+import { EQUIPMENT, type EquipmentDef } from '../data/equipment';
+import { isEquipment, isWeapon, itemName, itemPrice } from '../data/items';
+import { mechStats } from '../game/mechStats';
 import { SECTIONS } from '../game/units/SectionDamage';
 import { play } from '../core/audio';
 import { clockTime, h, money, signedMoney } from './h';
@@ -23,7 +26,7 @@ export class App {
   private screen: HTMLElement;
   private tab: Tab = 'contracts';
   private selectedContract: number | null = null;
-  private ammoTarget = 0;
+  private ammoTarget = { ballistic: 0, missile: 0 };
   private flash = '';
   private inMission = false;
   private quick = new URLSearchParams(window.location.search).has('quick');
@@ -180,7 +183,7 @@ export class App {
             class: `card tier${k.tier}`,
             onclick: () => {
               this.selectedContract = k.id;
-              this.ammoTarget = C.ammoCapacity(c.mech).ballistic;
+              this.ammoTarget = { ...C.ammoCapacity(c.mech) };
               this.showHangar('contracts');
             },
           },
@@ -194,38 +197,49 @@ export class App {
   }
 
   private deployPanel(c: CareerState, k: Contract): HTMLElement {
-    const cap = C.ammoCapacity(c.mech).ballistic;
-    const current = c.mech.ammo.ballistic;
-    this.ammoTarget = Math.max(current, Math.min(cap, this.ammoTarget));
+    const cap = C.ammoCapacity(c.mech);
+    const current = { ballistic: c.mech.ammo.ballistic, missile: c.mech.ammo.missile ?? 0 };
+    const t = this.ammoTarget;
+    t.ballistic = Math.max(current.ballistic, Math.min(cap.ballistic, t.ballistic));
+    t.missile = Math.max(current.missile, Math.min(cap.missile, t.missile));
     const fuel = C.fuelCost(c);
-    const blockerFor = () => C.deployBlocker(c, this.ammoTarget);
     const costs = h('div', { class: 'rows' });
     const deployBtn = h('button', { class: 'primary big', onclick: () => this.deploy(k) }, 'Deploy');
     const warn = h('div', { class: 'warn' });
-    const ammoOut = h('output');
+    const outs = { ballistic: h('output'), missile: h('output') };
     const renderCosts = () => {
-      const ammo = C.ammoCost(c, this.ammoTarget);
-      ammoOut.textContent = `${this.ammoTarget} / ${cap}`;
+      const ammo = C.ammoCost(c, t);
+      outs.ballistic.textContent = `${t.ballistic} / ${cap.ballistic}`;
+      outs.missile.textContent = `${t.missile} / ${cap.missile}`;
       costs.replaceChildren(
         row('Fuel', `${C.tonnage(c.mech)} t`, money(-fuel)),
-        row('Ammo', `+${this.ammoTarget - current} rounds`, money(-ammo)),
+        row('Ammo', `+${t.ballistic - current.ballistic} rounds${cap.missile > 0 ? `, +${t.missile - current.missile} missiles` : ''}`, money(-ammo)),
         row('Money after', '', money(c.money - fuel - ammo), 'total'),
       );
-      const b = blockerFor();
+      const b = C.deployBlocker(c, t);
       warn.textContent = b ?? '';
       deployBtn.disabled = !!b;
     };
-    const slider = h('input', {
-      type: 'range',
-      min: current,
-      max: cap,
-      step: 10,
-      value: this.ammoTarget,
-      oninput: (e: Event) => {
-        this.ammoTarget = Number((e.target as HTMLInputElement).value);
-        renderCosts();
-      },
-    });
+    const ammoField = (kind: 'ballistic' | 'missile', label: string, step: number) =>
+      current[kind] >= cap[kind]
+        ? h('div', { class: 'field-label' }, `${label} full (${cap[kind]})`)
+        : h(
+            'div',
+            { class: 'field' },
+            h('div', { class: 'field-label' }, `${label} `, outs[kind]),
+            h('input', {
+              type: 'range',
+              min: current[kind],
+              max: cap[kind],
+              step,
+              value: t[kind],
+              oninput: (e: Event) => {
+                t[kind] = Number((e.target as HTMLInputElement).value);
+                renderCosts();
+              },
+            }),
+          );
+    const ammoFields = [ammoField('ballistic', 'Ballistic ammo', 10), cap.missile > 0 ? ammoField('missile', 'Missiles', 2) : null];
     renderCosts();
 
     const damaged = SECTIONS.filter((s) => C.sectionRepairCost(c, s) > 0);
@@ -244,9 +258,7 @@ export class App {
         'div',
         { class: 'panel' },
         h('h3', null, 'Prepare'),
-        current >= cap
-          ? h('div', { class: 'field-label' }, `Ballistic ammo full (${cap})`)
-          : h('div', { class: 'field' }, h('div', { class: 'field-label' }, 'Ballistic ammo ', ammoOut), slider),
+        ammoFields,
         costs,
         damaged.length > 0 && !c.mech.destroyed
           ? h('p', { class: 'warn' }, `Damaged: ${damaged.map((s) => SECTION_NAMES[s]).join(', ')}. Repair in the Mech tab, or deploy as is.`)
@@ -329,15 +341,14 @@ export class App {
           ],
     );
 
-    const t = C.tonnage(m);
-    const p = C.powerDraw(m);
+    const st = mechStats(m);
     const loadout = h(
       'div',
       { class: 'panel' },
       h('h3', null, 'Loadout'),
       chassis.mounts.map((mount) => {
         const installed = m.weapons.find((w) => w.mount === mount.id);
-        const options = [...new Set(c.inventory.filter((id) => WEAPONS[id].family === mount.type))];
+        const options = [...new Set(c.inventory.filter((id) => WEAPONS[id]?.family === mount.type))];
         const select = h(
           'select',
           {
@@ -366,55 +377,89 @@ export class App {
             : h('span'),
         );
       }),
-      meter('Tonnage', t, chassis.maxTonnage, 't'),
-      meter('Power', p, chassis.powerOutput, ''),
+      meter('Tonnage', st.tonnage, st.maxTonnage, 't'),
+      meter('Power', st.powerDraw, st.powerOutput, ''),
+      meter('Slots', st.slotsUsed, st.slots, ''),
       h(
         'div',
         { class: 'rows small' },
-        row('Heat', `capacity ${chassis.heatCapacity}`, `sheds ${chassis.heatDissipation}/s`),
-        row('Ballistic ammo', `${m.ammo.ballistic} loaded`, `max ${C.ammoCapacity(m).ballistic}`),
+        row('Heat', `capacity ${st.heatCapacity}, reactor +${st.passiveHeat}/s`, `sheds ${st.dissipation}/s`),
+        row('Ammo', `${m.ammo.ballistic} rounds, ${m.ammo.missile ?? 0} missiles`, `max ${st.ammoCapacity.ballistic} / ${st.ammoCapacity.missile}`),
         row('Mech value', '', money(C.mechValue(m))),
       ),
       check.ok ? null : h('p', { class: 'warn' }, check.problems.join('. ') + '. Fix this before deploying.'),
-      h('p', { class: 'muted small' }, 'Buy weapons in the Shop; spare weapons appear in these lists.'),
+      h('p', { class: 'muted small' }, 'Buy weapons and equipment in the Shop; spares appear here.'),
     );
-    return h('div', { class: 'cols' }, armor, loadout);
+
+    const spareEquipment = [...new Set(c.inventory.filter((id) => isEquipment(id)))];
+    const equipment = h(
+      'div',
+      { class: 'panel' },
+      h('h3', null, `Internal equipment · ${st.slotsUsed}/${st.slots} slots`),
+      m.equipment.map((id, i) =>
+        h(
+          'div',
+          { class: 'shop-row' },
+          h('div', null, h('b', null, EQUIPMENT[id].name), h('div', { class: 'muted small' }, equipmentStats(EQUIPMENT[id]))),
+          h('button', { class: 'small-btn', onclick: () => this.act(() => C.removeEquipment(c, i)) }, 'Remove'),
+        ),
+      ),
+      spareEquipment.length > 0
+        ? h(
+            'div',
+            { class: 'mount-row' },
+            h('span', null, 'Add'),
+            h(
+              'select',
+              { onchange: (e: Event) => this.act(() => C.installEquipment(c, (e.target as HTMLSelectElement).value)) },
+              h('option', { value: '' }, '— choose spare equipment —'),
+              spareEquipment.map((id) => h('option', { value: id }, `${EQUIPMENT[id].name} (${EQUIPMENT[id].slots} slot${EQUIPMENT[id].slots > 1 ? 's' : ''})`)),
+            ),
+            h('span'),
+          )
+        : h('p', { class: 'muted small' }, 'Buy equipment in the Shop to fit it here. Installing a reactor swaps out the old one.'),
+    );
+    return h('div', { class: 'cols' }, armor, loadout, equipment);
   }
 
   // ---------- Shop ----------
 
   private shopTab(c: CareerState): HTMLElement {
-    const buy = h(
-      'div',
-      { class: 'panel' },
-      h('h3', null, 'Buy weapons'),
-      SHOP_STOCK.map((id) => {
-        const w = WEAPONS[id];
-        const cost = C.price(c, w.price);
-        return h(
+    const item = (id: string) => {
+      const cost = C.price(c, itemPrice(id));
+      const w = WEAPONS[id];
+      const e = EQUIPMENT[id];
+      return h(
+        'div',
+        { class: 'shop-row' },
+        h(
           'div',
-          { class: 'shop-row' },
-          h('div', null, h('b', null, w.name), h('span', { class: `chip ${w.family}` }, w.family), h('div', { class: 'muted small' }, weaponStats(w))),
-          h('button', { class: 'small-btn', disabled: cost > c.money, onclick: () => this.act(() => C.buyWeapon(c, id), `Bought ${w.name}.`) }, `Buy ${money(cost)}`),
-        );
-      }),
-    );
+          null,
+          h('b', null, itemName(id)),
+          w ? h('span', { class: `chip ${w.family}` }, w.family) : h('span', { class: 'chip' }, `${e.slots} slot${e.slots > 1 ? 's' : ''}`),
+          h('div', { class: 'muted small' }, w ? weaponStats(w) : equipmentStats(e)),
+        ),
+        h('button', { class: 'small-btn', disabled: cost > c.money, onclick: () => this.act(() => C.buyItem(c, id), `Bought ${itemName(id)}.`) }, `Buy ${money(cost)}`),
+      );
+    };
+    const weapons = h('div', { class: 'panel' }, h('h3', null, 'Weapons'), SHOP_STOCK.filter(isWeapon).map(item));
+    const equipment = h('div', { class: 'panel' }, h('h3', null, 'Equipment'), SHOP_STOCK.filter(isEquipment).map(item));
     const sell = h(
       'div',
       { class: 'panel' },
       h('h3', null, 'Spare gear'),
       c.inventory.length === 0
-        ? h('p', { class: 'muted small' }, 'Nothing spare. Uninstalled weapons go here (Mech tab); sell them for 60% of their price.')
+        ? h('p', { class: 'muted small' }, 'Nothing spare. Removed weapons and equipment go here; sell them for 60% of their price.')
         : c.inventory.map((id, i) =>
             h(
               'div',
               { class: 'shop-row' },
-              h('div', null, h('b', null, WEAPONS[id].name), h('div', { class: 'muted small' }, weaponStats(WEAPONS[id]))),
-              h('button', { class: 'small-btn', onclick: () => this.act(() => C.sellWeapon(c, i), `Sold ${WEAPONS[id].name}.`) }, `Sell ${money(C.sellPrice(c, id))}`),
+              h('div', null, h('b', null, itemName(id)), h('div', { class: 'muted small' }, WEAPONS[id] ? weaponStats(WEAPONS[id]) : equipmentStats(EQUIPMENT[id]))),
+              h('button', { class: 'small-btn', onclick: () => this.act(() => C.sellItem(c, i), `Sold ${itemName(id)}.`) }, `Sell ${money(C.sellPrice(c, id))}`),
             ),
           ),
     );
-    return h('div', { class: 'cols' }, buy, sell);
+    return h('div', { class: 'cols' }, weapons, equipment, sell);
   }
 
   // ---------- Finance ----------
@@ -638,7 +683,24 @@ function meter(label: string, value: number, max: number, unit: string): HTMLEle
   );
 }
 
+function equipmentStats(e: EquipmentDef): string {
+  const parts: string[] = [];
+  if (e.output) parts.push(`power ${e.output}`, `heat +${e.passiveHeat}/s`);
+  if (e.dissipation) parts.push(`sheds ${e.dissipation} heat/s`);
+  if (e.armor) parts.push(`+${e.armor.torso + e.armor.leftArm + e.armor.rightArm + e.armor.legs} armor`);
+  if (e.ammo) parts.push(e.ammo.ballistic ? `+${e.ammo.ballistic} rounds` : `+${e.ammo.missile} missiles`);
+  if (e.shield) parts.push(`absorbs ${e.shield.capacity} for ${e.shield.duration}s, every ${e.shield.cooldown}s`);
+  if (e.flares) parts.push(`${e.flares.charges} flares per mission, break missile locks`);
+  if (e.pointDefense) parts.push(`shoots missiles within ${e.pointDefense.range}`);
+  parts.push(`${e.tonnage} t`);
+  if (e.power) parts.push(`draws ${e.power} power`);
+  return parts.join(' · ');
+}
+
 function weaponStats(w: WeaponDef): string {
+  if (w.missile) {
+    return `${w.missile.salvo}× ${w.damage} dmg every ${Math.round(10 / w.fireRate) / 10}s · ${w.missile.turnRate > 0 ? 'seeking' : 'unguided'} · range ${w.range} · ${w.tonnage} t · power ${w.power} · ${w.ammoPerShot} missiles/salvo`;
+  }
   const dps = Math.round(w.damage * w.fireRate);
   const ammo = w.ammoPerShot > 0 ? ` · ammo ${w.ammoPerShot}/shot` : ' · no ammo';
   return `${dps} dps · range ${w.range} · heat ${Math.round(w.heat * w.fireRate * 10) / 10}/s · ${w.tonnage} t · power ${w.power}${ammo}`;

@@ -58,10 +58,14 @@ export interface ButtonView {
   x: number;
   y: number;
   pressed: boolean;
+  /** Hidden buttons ignore touches (equipment buttons show only when equipment is fitted). */
+  visible: boolean;
 }
 
-export const touchButtons: { swap: ButtonView } = {
-  swap: { x: 0, y: 0, pressed: false },
+export const touchButtons: { swap: ButtonView; equip1: ButtonView; equip2: ButtonView } = {
+  swap: { x: 0, y: 0, pressed: false, visible: true },
+  equip1: { x: 0, y: 0, pressed: false, visible: false },
+  equip2: { x: 0, y: 0, pressed: false, visible: false },
 };
 
 export function clearHeldActions(): void {

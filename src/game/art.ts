@@ -241,6 +241,46 @@ export function bakeCombatArt(scene: Phaser.Scene): void {
     g.fillStyle(0xffffff, 1).fillRect(-32, -1, 64, 2);
   });
 
+  // Missiles and rockets (drawn along +x).
+  const missile = (key: string, body: number, tip: number) =>
+    bake(scene, key, 18, 8, (g) => {
+      g.fillStyle(body).fillRoundedRect(-7, -2, 12, 4, 1.5);
+      g.fillStyle(tip).fillTriangle(5, -2, 9, 0, 5, 2);
+      g.fillStyle(0x3a434b).fillTriangle(-7, -3.5, -4, 0, -7, 3.5);
+    });
+  missile('missile', 0xd6dde3, 0xe8a33d);
+  missile('missile-enemy', 0xd6dde3, 0xff5a4f);
+  bake(scene, 'rocket', 14, 6, (g) => {
+    g.fillStyle(0xb7c0c7).fillRect(-5, -1.5, 9, 3);
+    g.fillStyle(0xffc561).fillTriangle(4, -1.5, 7, 0, 4, 1.5);
+  });
+  bake(scene, 'flare', 16, 16, (g) => {
+    g.fillStyle(0xffd27a, 0.4).fillCircle(0, 0, 6);
+    g.fillStyle(0xffffff, 1).fillCircle(0, 0, 2.5);
+  });
+  // Point defense tracer: same length as the beam texture so the same code stretches it.
+  bake(scene, 'pd-tracer', 64, 6, (g) => {
+    g.fillStyle(0xffe08a, 0.9).fillRect(-32, -0.75, 64, 1.5);
+  });
+  // Shield bubble around a mech.
+  bake(scene, 'shield-bubble', 92, 92, (g) => {
+    g.fillStyle(0x4fd8ff, 0.12).fillCircle(0, 0, 42);
+    g.lineStyle(2, 0x7fe6ff, 0.7).strokeCircle(0, 0, 42);
+  });
+  // Missile lock reticle on a target.
+  bake(scene, 'lock', 70, 70, (g) => {
+    g.lineStyle(2.5, 0xff9a3d, 0.95);
+    for (const [sx, sy] of [
+      [-1, -1],
+      [1, -1],
+      [1, 1],
+      [-1, 1],
+    ]) {
+      g.lineBetween(sx * 30, sy * 30, sx * 30 - sx * 10, sy * 30);
+      g.lineBetween(sx * 30, sy * 30, sx * 30, sy * 30 - sy * 10);
+    }
+  });
+
   // Effects.
   bake(scene, 'spark', 8, 8, (g) => {
     g.fillStyle(0xffe08a).fillCircle(0, 0, 2.5);

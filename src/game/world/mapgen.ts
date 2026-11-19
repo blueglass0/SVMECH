@@ -148,7 +148,7 @@ export function generateDestroyTargets(seed: number, difficulty: CombatDifficult
     for (let attempt = 0; attempt < 60; attempt++) {
       const p = { x: near.x + rng.range(-spread, spread), y: near.y + rng.range(-spread, spread) };
       if (dist(p, spawn) < 900 || !free(p, 40)) continue;
-      tanks.push({ type: T.tankType, x: p.x, y: p.y, angle: rng.range(-Math.PI, Math.PI), home });
+      tanks.push({ type: pickWeighted(rng, T.tankTypes), x: p.x, y: p.y, angle: rng.range(-Math.PI, Math.PI), home });
       return;
     }
   };
@@ -161,6 +161,15 @@ export function generateDestroyTargets(seed: number, difficulty: CombatDifficult
   }
 
   return { seed, width: W, height: H, obstacles, spawn, targets, turrets, tanks };
+}
+
+function pickWeighted(rng: Rng, items: readonly { type: string; weight: number }[]): string {
+  let r = rng.next() * items.reduce((t, i) => t + i.weight, 0);
+  for (const i of items) {
+    r -= i.weight;
+    if (r <= 0) return i.type;
+  }
+  return items[0].type;
 }
 
 function dist(a: Vec, b: Vec): number {

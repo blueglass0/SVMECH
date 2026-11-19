@@ -6,14 +6,14 @@
  */
 import { settings, saveSettings } from './settings';
 
-export type SoundId = 'mg' | 'cannon' | 'laser' | 'hit' | 'explode' | 'bigExplode' | 'warn' | 'ui';
+export type SoundId = 'mg' | 'cannon' | 'laser' | 'missile' | 'flare' | 'shield' | 'lock' | 'hit' | 'explode' | 'bigExplode' | 'warn' | 'ui';
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let noise: AudioBuffer | null = null;
 /** Last play time per sound, to stop rapid-fire weapons stacking into noise. */
 const last: Partial<Record<SoundId, number>> = {};
-const MIN_GAP: Partial<Record<SoundId, number>> = { mg: 0.045, hit: 0.05, cannon: 0.04, warn: 0.3 };
+const MIN_GAP: Partial<Record<SoundId, number>> = { mg: 0.045, hit: 0.05, cannon: 0.04, warn: 0.3, missile: 0.08, lock: 0.25 };
 
 function init(): void {
   if (ctx) return;
@@ -62,6 +62,21 @@ export function play(id: SoundId, volume = 1): void {
     case 'laser':
       tone(now, 'sawtooth', 1400, 260, 0.18, 0.18 * v);
       tone(now, 'square', 700, 180, 0.14, 0.08 * v);
+      break;
+    case 'missile':
+      burst(now, 0.35, 1200, 'bandpass', 0.45 * v, 0.8);
+      tone(now, 'sawtooth', 160, 420, 0.3, 0.08 * v);
+      break;
+    case 'flare':
+      burst(now, 0.25, 3000, 'highpass', 0.35 * v);
+      tone(now, 'square', 1200, 600, 0.15, 0.06 * v);
+      break;
+    case 'shield':
+      tone(now, 'sine', 220, 660, 0.35, 0.25 * v);
+      tone(now, 'triangle', 330, 990, 0.35, 0.12 * v);
+      break;
+    case 'lock':
+      tone(now, 'square', 1500, 1500, 0.05, 0.06 * v);
       break;
     case 'hit':
       burst(now, 0.04, 3500, 'highpass', 0.25 * v);

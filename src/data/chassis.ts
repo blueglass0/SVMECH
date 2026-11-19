@@ -50,16 +50,16 @@ export interface ChassisDef {
   price: number;
   /** Most the mech can weigh with weapons and equipment, tons. */
   maxTonnage: number;
-  /** Weight of the chassis itself (structure, armor, built-in reactor), tons. */
+  /** Weight of the chassis itself (structure and base armor), tons. */
   baseTonnage: number;
-  /** Power from the built-in reactor (swappable reactors arrive in milestone 6). */
-  powerOutput: number;
+  /** Internal slots for equipment (the reactor goes here too). */
+  internalSlots: number;
   movement: ChassisMovement;
   /** Armor per section. The mech is destroyed when the torso reaches 0. */
   sections: Record<Section, number>;
   /** Heat at which the mech shuts down. */
   heatCapacity: number;
-  /** Heat shed per second (heat sinks add to this from milestone 6). */
+  /** Heat shed per second by the chassis itself (heat sinks add to this). */
   heatDissipation: number;
   /** Ammo pool capacity before ammo bins. */
   ammoCapacity: { ballistic: number; missile: number };
@@ -75,8 +75,8 @@ export const CHASSIS: Record<string, ChassisDef> = {
     radius: 30,
     price: 400000,
     maxTonnage: 50,
-    baseTonnage: 36,
-    powerOutput: 14,
+    baseTonnage: 30,
+    internalSlots: 8,
     movement: {
       maxSpeed: 150,
       reverseFactor: 0.55,
@@ -90,13 +90,14 @@ export const CHASSIS: Record<string, ChassisDef> = {
     },
     sections: { torso: 380, leftArm: 150, rightArm: 150, legs: 180 },
     heatCapacity: 100,
-    heatDissipation: 8,
-    ammoCapacity: { ballistic: 1350, missile: 0 },
+    heatDissipation: 6,
+    ammoCapacity: { ballistic: 1350, missile: 24 },
     mounts: [
       { id: 'la-b', section: 'leftArm', type: 'ballistic', x: 30, y: -21 },
       { id: 'la-e', section: 'leftArm', type: 'energy', x: 24, y: -27 },
       { id: 'ra-b', section: 'rightArm', type: 'ballistic', x: 30, y: 21 },
       { id: 'ra-e', section: 'rightArm', type: 'energy', x: 24, y: 27 },
+      { id: 't-m', section: 'torso', type: 'missile', x: 4, y: -10 },
     ],
   },
 };

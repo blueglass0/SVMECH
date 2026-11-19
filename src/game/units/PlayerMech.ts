@@ -9,6 +9,8 @@ import type { MechState } from '../../career/types';
 import { WEAPONS, type WeaponDef } from '../../data/weapons';
 import { MechMotor } from '../MechMotor';
 import { MechView } from '../MechView';
+import { mechStats, type MechStats } from '../mechStats';
+import { play } from '../../core/audio';
 import type { Combat } from '../combat/Combat';
 import type { Team, Unit } from '../combat/types';
 
@@ -23,6 +25,30 @@ export interface MountedWeapon {
 }
 
 const NO_INPUT: Vec = { x: 0, y: 0 };
+
+/** Everything the player controls in one frame (from the input layer). */
+export interface PilotInput {
+  scheme: ControlScheme;
+  move: Vec;
+  aimTarget: Vec | null;
+  fire1: boolean;
+  fire2: boolean;
+  equip1: boolean;
+  equip2: boolean;
+  /** Target seeking missiles will home on (null = fire unguided). */
+  lock: Unit | null;
+}
+
+/** Runtime state of activated equipment. */
+export interface EquipmentState {
+  /** Shield: seconds left up, damage it can still absorb, seconds until usable again. */
+  shieldUp: number;
+  shieldPool: number;
+  shieldCooldown: number;
+  flares: number;
+  flareCooldown: number;
+  pdCooldown: number;
+}
 
 /** The player's mech in combat: movement, weapons, heat, ammo and armor. */
 export class PlayerMech implements Unit {
@@ -47,11 +73,19 @@ export class PlayerMech implements Unit {
   /** Called when a section is destroyed (explosion effects, HUD labels). */
   onSectionDestroyed?: (section: Section) => void;
   stats = { shots: 0, damageTaken: 0, ammoUsed: 0 };
+  /** Derived from the loadout: heat, armor max, ammo capacity, equipment. */
+  readonly loadout: MechStats;
+  readonly equipmentIds: string[];
+  equip: EquipmentState;
+  private prevEquip = [false, false];
+  private shieldImg: Phaser.GameObjects.Image;
 
   constructor(scene: Phaser.Scene, state: MechState, movement: ChassisMovement, x: number, y: number, angle: number) {
     this.chassis = CHASSIS[state.chassis];
     this.radius = this.chassis.radius;
-    this.sections = new SectionDamage(this.chassis.sections);
+    this.equipmentIds = [...state.equipment];
+    this.loadout = mechStats(state);
+    this.sections = new SectionDamage(this.loadout.sections);
     // Carry damage over from earlier missions (unrepaired sections).
     this.sections.hp = { ...state.sections };
     this.ammo = { ...state.ammo };
@@ -71,6 +105,15 @@ export class PlayerMech implements Unit {
       }
     }
     this.updateLegs();
+    this.equip = {
+      shieldUp: 0,
+      shieldPool: 0,
+      shieldCooldown: 0,
+      flares: this.loadout.flares?.charges ?? 0,
+      flareCooldown: 0,
+      pdCooldown: 0,
+    };
+    this.shieldImg = scene.add.image(x, y, 'shield-bubble').setScale(1 / 2).setDepth(9).setVisible(false);
   }
 
   /** The mech's state to carry back to the career after the mission. */
@@ -78,6 +121,7 @@ export class PlayerMech implements Unit {
     return {
       chassis: this.chassis.id,
       weapons: this.weapons.map((w) => ({ mount: w.mount.id, weapon: w.def.id, group: w.group })),
+      equipment: [...this.equipmentIds],
       sections: { ...this.sections.hp },
       ammo: { ...this.ammo },
       destroyed: !this.alive,
@@ -107,38 +151,36 @@ export class PlayerMech implements Unit {
     return Math.sin(this.motor.legAngle) * this.motor.speed;
   }
 
-  update(
-    dt: number,
-    scheme: ControlScheme,
-    move: Vec,
-    aimTarget: Vec | null,
-    fire1: boolean,
-    fire2: boolean,
-    world: CollisionWorld,
-    bodies: readonly Circle[],
-    combat: Combat,
-  ): boolean {
+  update(dt: number, input: PilotInput, world: CollisionWorld, bodies: readonly Circle[], combat: Combat): boolean {
     if (!this.alive) return false;
-    const c = this.chassis;
+    const L = this.loadout;
 
-    // Heat: shed continuously, faster while shut down.
-    const cooling = c.heatDissipation * (this.shutdown > 0 ? HEAT_RULES.shutdownCoolingMultiplier : 1);
-    this.heat = Math.max(0, this.heat - cooling * dt);
+    // Heat: the reactor always adds some; the chassis and heat sinks shed it (faster while shut down).
+    const cooling = L.dissipation * (this.shutdown > 0 ? HEAT_RULES.shutdownCoolingMultiplier : 1);
+    this.heat = Math.max(0, this.heat + (L.passiveHeat - cooling) * dt);
     if (this.shutdown > 0) {
       this.shutdown = Math.max(0, this.shutdown - dt);
       if (this.shutdown === 0) this.view.setAlpha(1);
     }
     const running = this.shutdown === 0;
 
-    const stepped = this.motor.update(dt, scheme, running ? move : NO_INPUT, running ? aimTarget : null, world, bodies, this);
+    const stepped = this.motor.update(
+      dt,
+      input.scheme,
+      running ? input.move : NO_INPUT,
+      running ? input.aimTarget : null,
+      world,
+      bodies,
+      this,
+    );
 
     for (const w of this.weapons) {
       w.cooldown = Math.max(0, w.cooldown - dt);
-      const held = w.group === 1 ? fire1 : fire2;
+      const held = w.group === 1 ? input.fire1 : input.fire2;
       if (!held || !running || w.cooldown > 0 || w.destroyed) continue;
       const pool = w.def.family === 'missile' ? 'missile' : 'ballistic';
       if (w.def.ammoPerShot > 0 && this.ammo[pool] < w.def.ammoPerShot) continue;
-      this.fireWeapon(w, combat);
+      this.fireWeapon(w, combat, input.lock);
       if (w.def.ammoPerShot > 0) {
         this.ammo[pool] -= w.def.ammoPerShot;
         this.stats.ammoUsed += w.def.ammoPerShot;
@@ -148,18 +190,75 @@ export class PlayerMech implements Unit {
       w.cooldown = 1 / w.def.fireRate;
     }
 
-    if (running && this.heat >= c.heatCapacity) {
+    this.updateEquipment(dt, input, running, combat);
+
+    if (running && this.heat >= L.heatCapacity) {
       this.shutdown = HEAT_RULES.shutdownTime;
       this.view.setAlpha(0.55);
     }
 
     this.view.update(dt);
+    this.shieldImg.setPosition(this.x, this.y).setVisible(this.equip.shieldUp > 0);
     return stepped;
+  }
+
+  /** Equipment actions (on press) and point defense (automatic). */
+  private updateEquipment(dt: number, input: PilotInput, running: boolean, combat: Combat): void {
+    const e = this.equip;
+    const L = this.loadout;
+    e.shieldCooldown = Math.max(0, e.shieldCooldown - dt);
+    e.flareCooldown = Math.max(0, e.flareCooldown - dt);
+    if (e.shieldUp > 0) {
+      e.shieldUp = Math.max(0, e.shieldUp - dt);
+      if (e.shieldUp === 0 || e.shieldPool <= 0) e.shieldUp = 0;
+    }
+    const pressed = [input.equip1 && !this.prevEquip[0], input.equip2 && !this.prevEquip[1]];
+    this.prevEquip[0] = input.equip1;
+    this.prevEquip[1] = input.equip2;
+    L.actions.forEach((kind, i) => {
+      if (!pressed[i] || !running) return;
+      if (kind === 'flares' && L.flares && e.flares > 0 && e.flareCooldown === 0) {
+        e.flares--;
+        e.flareCooldown = L.flares.cooldown;
+        combat.missiles.breakLocks(this, this.x, this.y);
+        combat.flareEffect(this.x, this.y);
+        play('flare', 1);
+      } else if (kind === 'shield' && L.shield && e.shieldCooldown === 0) {
+        e.shieldUp = L.shield.duration;
+        e.shieldPool = L.shield.capacity;
+        e.shieldCooldown = L.shield.cooldown;
+        this.heat += L.shield.heat;
+        play('shield', 1);
+      }
+    });
+
+    // Point defense: shoots the nearest incoming missile on its own (needs power, so not while shut down).
+    const pd = L.pointDefense;
+    if (pd && running) {
+      e.pdCooldown = Math.max(0, e.pdCooldown - dt);
+      if (e.pdCooldown === 0) {
+        const m = combat.missiles.nearestHostile(this.x, this.y, pd.range, 'player');
+        if (m) {
+          combat.pointDefenseShot(this.x, this.y, m, pd.damage, pd.accuracy);
+          e.pdCooldown = 1 / pd.fireRate;
+        }
+      }
+    }
+  }
+
+  /** Damage the shield soaks up before armor; returns what gets through. */
+  private shieldAbsorb(amount: number): number {
+    const e = this.equip;
+    if (e.shieldUp <= 0 || e.shieldPool <= 0) return amount;
+    const soaked = Math.min(e.shieldPool, amount);
+    e.shieldPool -= soaked;
+    if (e.shieldPool <= 0) e.shieldUp = 0;
+    return amount - soaked;
   }
 
   /** Fraction 0..1 of the way to overheating. */
   get heatFraction(): number {
-    return Math.min(1, this.heat / this.chassis.heatCapacity);
+    return Math.min(1, this.heat / this.loadout.heatCapacity);
   }
 
   takeDamage(amount: number, fromX: number, fromY: number, hitX?: number, hitY?: number): void {
@@ -168,6 +267,8 @@ export class PlayerMech implements Unit {
     this.lastHit = performance.now();
     this.lastHitAngle = worldAngle;
     if (this.invulnerable) return;
+    amount = this.shieldAbsorb(amount);
+    if (amount <= 0) return;
     const before = this.sections.total;
     // The section is picked by where the shot struck the mech's outline: arms are either
     // side of the torso, so off-centre hits from the front land on an arm.
@@ -180,6 +281,8 @@ export class PlayerMech implements Unit {
 
   takeSplash(amount: number): void {
     if (!this.alive || this.invulnerable) return;
+    amount = this.shieldAbsorb(amount);
+    if (amount <= 0) return;
     const before = this.sections.total;
     const hit = this.sections.applySplash(amount);
     this.stats.damageTaken += before - this.sections.total;
@@ -202,7 +305,8 @@ export class PlayerMech implements Unit {
   }
 
   refill(): void {
-    this.ammo = { ...this.chassis.ammoCapacity };
+    this.ammo = { ...this.loadout.ammoCapacity };
+    this.equip.flares = this.loadout.flares?.charges ?? 0;
     this.heat = 0;
     this.shutdown = 0;
     this.sections.repairAll();
@@ -232,12 +336,12 @@ export class PlayerMech implements Unit {
     this.motor.turnFactor = f.turn;
   }
 
-  private fireWeapon(w: MountedWeapon, combat: Combat): void {
+  private fireWeapon(w: MountedWeapon, combat: Combat, lock: Unit | null): void {
     const m = this.motor;
     const ca = Math.cos(m.torsoAngle);
     const sa = Math.sin(m.torsoAngle);
     const mx = m.pos.x + w.mount.x * ca - w.mount.y * sa;
     const my = m.pos.y + w.mount.x * sa + w.mount.y * ca;
-    combat.fire(mx, my, m.torsoAngle, w.def, 'player');
+    combat.fire(mx, my, m.torsoAngle, w.def, 'player', 1, 1, 0, lock);
   }
 }

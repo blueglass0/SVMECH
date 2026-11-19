@@ -10,8 +10,9 @@ export interface GroupStatus {
   ready: number;
   /** Out of ammo. */
   empty: boolean;
-  /** Has a weapon that uses ammo (show the ammo count next to it). */
+  /** Has a weapon that uses ballistic / missile ammo (show the counts next to it). */
   usesAmmo: boolean;
+  usesMissiles: boolean;
 }
 
 export const hud = {
@@ -29,6 +30,11 @@ export const hud = {
   /** Seconds of shutdown left. */
   shutdown: 0,
   ammo: 0,
+  ammoMissile: 0,
+  /** Missiles are homing in on the player. */
+  missileWarning: false,
+  /** Activated equipment on action 1 and 2 (Q / E). */
+  equipment: [] as { label: string; ready: boolean; active: boolean }[],
   ammoMax: 0,
   groups: [] as GroupStatus[],
   objectiveLabel: '',

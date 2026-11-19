@@ -11,8 +11,8 @@ export interface WeaponDef {
   /** Short label for the HUD. */
   short: string;
   family: HardpointType;
-  /** Projectiles fly and can miss; beams hit instantly along a line. */
-  delivery: 'projectile' | 'beam';
+  /** Projectiles fly and can miss; beams hit instantly along a line; missiles are objects that can be shot down. */
+  delivery: 'projectile' | 'beam' | 'missile';
   damage: number;
   /** Shots per second. */
   fireRate: number;
@@ -29,12 +29,22 @@ export interface WeaponDef {
   tonnage: number;
   price: number;
   /** Visual and sound style. */
-  look: 'bullet' | 'shell' | 'laser';
+  look: 'bullet' | 'shell' | 'laser' | 'missile' | 'rocket';
   /**
    * Shells that burst on the ground where they were aimed (if they don't hit
    * something first), damaging anything within `radius`: mech legs, mostly.
    */
   splash?: { radius: number; damage: number };
+  /** Missiles and rockets: one shot fires a salvo. */
+  missile?: {
+    salvo: number;
+    /** Degrees between missiles in the fan. */
+    fan: number;
+    /** Seeking: turn rate toward the locked target, degrees/s (0 = unguided rocket). */
+    turnRate: number;
+    /** Hits a missile can take before it is destroyed. */
+    hp: number;
+  };
 }
 
 export const WEAPONS: Record<string, WeaponDef> = {
@@ -112,7 +122,68 @@ export const WEAPONS: Record<string, WeaponDef> = {
     look: 'laser',
   },
 
+  missilePack: {
+    id: 'missilePack',
+    name: 'Seeking missile pack',
+    short: 'MSL',
+    family: 'missile',
+    delivery: 'missile',
+    damage: 7,
+    fireRate: 0.33,
+    range: 650,
+    projectileSpeed: 360,
+    spread: 2,
+    heat: 3,
+    ammoPerShot: 4,
+    power: 1,
+    tonnage: 4,
+    price: 32000,
+    look: 'missile',
+    splash: { radius: 30, damage: 3 },
+    missile: { salvo: 4, fan: 7, turnRate: 170, hp: 3 },
+  },
+  rocketPod: {
+    id: 'rocketPod',
+    name: 'Rocket pod',
+    short: 'RKT',
+    family: 'missile',
+    delivery: 'missile',
+    damage: 9,
+    fireRate: 0.25,
+    range: 520,
+    projectileSpeed: 540,
+    spread: 4,
+    heat: 4,
+    ammoPerShot: 6,
+    power: 0,
+    tonnage: 3,
+    price: 20000,
+    look: 'rocket',
+    splash: { radius: 40, damage: 5 },
+    missile: { salvo: 6, fan: 3, turnRate: 0, hp: 2 },
+  },
+
   // --- Enemy weapons ---
+  enemyMissiles: {
+    id: 'enemyMissiles',
+    name: 'Missile launcher',
+    short: 'MSL',
+    family: 'missile',
+    delivery: 'missile',
+    damage: 7,
+    fireRate: 0.22,
+    range: 620,
+    projectileSpeed: 300,
+    spread: 3,
+    heat: 0,
+    ammoPerShot: 0,
+    power: 0,
+    tonnage: 0,
+    price: 0,
+    look: 'missile',
+    splash: { radius: 30, damage: 3 },
+    missile: { salvo: 3, fan: 10, turnRate: 120, hp: 3 },
+  },
   tankCannon: {
     id: 'tankCannon',
     name: 'Tank cannon',

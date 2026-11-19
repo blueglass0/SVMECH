@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { actions } from './actions';
 
-type KeyMap = Record<'W' | 'A' | 'S' | 'D' | 'UP' | 'LEFT' | 'DOWN' | 'RIGHT', Phaser.Input.Keyboard.Key>;
+type KeyMap = Record<'W' | 'A' | 'S' | 'D' | 'UP' | 'LEFT' | 'DOWN' | 'RIGHT' | 'Q' | 'E', Phaser.Input.Keyboard.Key>;
 
 /** Keyboard + mouse source. WASD/arrows move, mouse aims. */
 export class KeyboardMouseSource {
@@ -10,7 +10,7 @@ export class KeyboardMouseSource {
   constructor(scene: Phaser.Scene) {
     const kb = scene.input.keyboard;
     if (kb) {
-      this.keys = kb.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT') as KeyMap;
+      this.keys = kb.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT,Q,E') as KeyMap;
       kb.on('keydown', () => {
         actions.device = 'kbm';
       });
@@ -48,6 +48,9 @@ export class KeyboardMouseSource {
     }
     actions.move.x = x;
     actions.move.y = y;
+    // Equipment actions: Q and E.
+    actions.equip1 = k.Q.isDown;
+    actions.equip2 = k.E.isDown;
   }
 
   reset(): void {

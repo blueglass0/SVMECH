@@ -55,7 +55,27 @@ export const ECONOMY_DIFFICULTY: Record<'easy' | 'normal' | 'hard', EconomyDiffi
 };
 
 /** Weapons the shop sells (factions and reputation change this from milestone 9). */
-export const SHOP_STOCK = ['machineGun', 'autocannon', 'smallLaser', 'laser'];
+export const SHOP_STOCK = [
+  // Weapons
+  'machineGun',
+  'autocannon',
+  'smallLaser',
+  'laser',
+  'rocketPod',
+  'missilePack',
+  // Equipment
+  'lightReactor',
+  'standardReactor',
+  'heavyReactor',
+  'heatSink',
+  'doubleHeatSink',
+  'armorPlating',
+  'ammoBin',
+  'missileBin',
+  'shieldGenerator',
+  'flareLauncher',
+  'pointDefense',
+];
 
 /** Contract flavour: faction-neutral until milestone 9 adds the three factions. */
 export const EMPLOYERS = [
