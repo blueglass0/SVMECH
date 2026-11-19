@@ -27,6 +27,14 @@ export const DISPLAY = {
    */
   viewShortAxis: 720,
 
+  /**
+   * Phones (screens whose short side is under `smallScreenCss` CSS px) see a
+   * little less of the map so the mech isn't tiny: 640 makes everything
+   * ~12% bigger than on PC.
+   */
+  viewShortAxisSmall: 640,
+  smallScreenCss: 600,
+
   /** Background (clear) colour. */
   background: 0x0b0e11,
 } as const;

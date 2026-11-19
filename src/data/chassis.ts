@@ -27,6 +27,18 @@ export interface ChassisMovement {
   stepShake: number;
 }
 
+export type HardpointType = 'ballistic' | 'energy' | 'missile';
+export type Section = 'torso' | 'leftArm' | 'rightArm' | 'legs';
+
+/** A weapon hardpoint. Position is in torso space (facing +x, +y = right side), world units. */
+export interface MountDef {
+  id: string;
+  section: Section;
+  type: HardpointType;
+  x: number;
+  y: number;
+}
+
 export interface ChassisDef {
   id: string;
   name: string;
@@ -35,6 +47,15 @@ export interface ChassisDef {
   /** Collision radius, units. */
   radius: number;
   movement: ChassisMovement;
+  /** Total armor. Milestone 4 splits this per section. */
+  armor: number;
+  /** Heat at which the mech shuts down. */
+  heatCapacity: number;
+  /** Heat shed per second (heat sinks add to this from milestone 6). */
+  heatDissipation: number;
+  /** Ammo pool capacity before ammo bins. */
+  ammoCapacity: { ballistic: number; missile: number };
+  mounts: MountDef[];
 }
 
 export const CHASSIS: Record<string, ChassisDef> = {
@@ -55,6 +76,16 @@ export const CHASSIS: Record<string, ChassisDef> = {
       strideLength: 46,
       stepShake: 0.0012,
     },
+    armor: 600,
+    heatCapacity: 100,
+    heatDissipation: 11,
+    ammoCapacity: { ballistic: 900, missile: 0 },
+    mounts: [
+      { id: 'la-b', section: 'leftArm', type: 'ballistic', x: 30, y: -21 },
+      { id: 'la-e', section: 'leftArm', type: 'energy', x: 24, y: -27 },
+      { id: 'ra-b', section: 'rightArm', type: 'ballistic', x: 30, y: 21 },
+      { id: 'ra-e', section: 'rightArm', type: 'energy', x: 24, y: 27 },
+    ],
   },
 };
 

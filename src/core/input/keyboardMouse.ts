@@ -21,9 +21,14 @@ export class KeyboardMouseSource {
       actions.aimMode = 'point';
       actions.aim.x = p.x;
       actions.aim.y = p.y;
+      // Left button fires group 1, right button group 2.
+      actions.fire1 = (p.buttons & 1) !== 0;
+      actions.fire2 = (p.buttons & 2) !== 0;
     };
     scene.input.on(Phaser.Input.Events.POINTER_MOVE, onMouse);
     scene.input.on(Phaser.Input.Events.POINTER_DOWN, onMouse);
+    scene.input.on(Phaser.Input.Events.POINTER_UP, onMouse);
+    scene.input.on(Phaser.Input.Events.POINTER_UP_OUTSIDE, onMouse);
   }
 
   /** Called once per frame before game logic. */

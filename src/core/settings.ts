@@ -9,12 +9,13 @@ export type InputDevice = 'kbm' | 'touch';
 export interface Settings {
   /** Movement scheme per input device. */
   scheme: Record<InputDevice, ControlScheme>;
+  muted: boolean;
 }
 
 const KEY = 'steel-vulture.settings.v1';
 
 function defaults(): Settings {
-  return { scheme: { kbm: 'tank', touch: 'direction' } };
+  return { scheme: { kbm: 'tank', touch: 'direction' }, muted: false };
 }
 
 function load(): Settings {

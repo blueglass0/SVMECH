@@ -1,6 +1,6 @@
 import type { ChassisMovement } from '../data/chassis';
 import type { ControlScheme } from '../core/settings';
-import { resolveCircle, type Bounds, type Obstacle } from '../core/collision';
+import type { Circle, CollisionWorld } from '../core/collision';
 import { DEG, approach, approachAngle, clamp, wrapAngle, type Vec } from '../core/math';
 
 /**
@@ -41,8 +41,9 @@ export class MechMotor {
     scheme: ControlScheme,
     input: Vec,
     aimTarget: Vec | null,
-    obstacles: readonly Obstacle[],
-    bounds: Bounds,
+    world: CollisionWorld,
+    bodies?: readonly Circle[],
+    self?: Circle,
   ): boolean {
     const m = this.move;
     const turnRate = m.legTurnRate * DEG;
@@ -80,7 +81,7 @@ export class MechMotor {
     const oy = this.pos.y;
     this.pos.x += fx * this.speed * dt;
     this.pos.y += fy * this.speed * dt;
-    if (resolveCircle(this.pos, this.radius, obstacles, bounds) && dt > 0) {
+    if (world.resolveCircle(this.pos, this.radius, bodies, self) && dt > 0) {
       // Walking into something kills the speed you couldn't use; sliding along a wall keeps some.
       const along = ((this.pos.x - ox) * fx + (this.pos.y - oy) * fy) / dt;
       if (Math.abs(along) < Math.abs(this.speed)) this.speed = along;

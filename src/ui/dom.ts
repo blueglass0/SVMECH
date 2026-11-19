@@ -4,7 +4,8 @@ import { settings, saveSettings } from '../core/settings';
 import { DEBUG } from '../core/debug';
 import { portraitPhone } from '../core/orientation';
 import { CHASSIS, STARTER_CHASSIS, type ChassisMovement } from '../data/chassis';
-import type { MapScene } from '../scenes/MapScene';
+import type { MapScene, MissionResult } from '../scenes/MapScene';
+import { play, setMuted } from '../core/audio';
 
 /**
  * Menus and buttons are plain HTML laid over the canvas: crisp at any
@@ -45,6 +46,16 @@ export function mountDomUi(game: Phaser.Game, container: HTMLElement): void {
     fsBtn.title = 'Fullscreen';
     fsBtn.classList.add('icon');
   }
+
+  const muteBtn = button(bar, '', () => {
+    setMuted(!settings.muted);
+    muteBtn.textContent = settings.muted ? '🔇' : '🔊';
+  });
+  muteBtn.textContent = settings.muted ? '🔇' : '🔊';
+  muteBtn.title = 'Sound on/off';
+  muteBtn.classList.add('icon');
+
+  mountEndScreen(game, container);
 
   if (DEBUG) {
     const panel = tuningPanel(game);
@@ -127,7 +138,7 @@ function tuningPanel(game: Phaser.Game): HTMLElement {
       () => prompt('Copy these values:', text),
     ) ?? prompt('Copy these values:', text);
   });
-  button(actionsRow, 'Reset', () => {
+  button(actionsRow, 'Reset movement', () => {
     const m = movement();
     for (const i of inputs) {
       i.input.value = String(defaults[i.key]);
@@ -136,7 +147,75 @@ function tuningPanel(game: Phaser.Game): HTMLElement {
     }
   });
   panel.appendChild(actionsRow);
+
+  // Dev tools for fast playtests.
+  const devTitle = el('div', 'tuning-title');
+  devTitle.textContent = 'Dev tools';
+  devTitle.style.marginTop = '12px';
+  const dev = el('div', 'tuning-actions');
+  const map = () => game.scene.getScene('Map') as MapScene | null;
+  button(dev, 'Win mission', () => map()?.devWin());
+  button(dev, 'Spawn tank', () => map()?.devSpawnTank());
+  const god = button(dev, 'Invulnerable: off', () => {
+    const on = map()?.devToggleInvulnerable();
+    god.textContent = `Invulnerable: ${on ? 'on' : 'off'}`;
+  });
+  button(dev, 'Refill armor/ammo/heat', () => map()?.devRefill());
+  button(dev, 'New map', () => restartMission(game));
+  panel.append(devTitle, dev);
   return panel;
+}
+
+/** Start a mission: a new random map, or the same map again with `seed`. */
+export function restartMission(game: Phaser.Game, seed?: number): void {
+  document.querySelector('.endscreen')?.classList.remove('open');
+  const map = game.scene.getScene('Map') as MapScene;
+  map.scene.restart({ seed });
+  game.scene.getScene('Hud')?.scene.restart();
+}
+
+function mountEndScreen(game: Phaser.Game, container: HTMLElement): void {
+  const screen = el('div', 'endscreen');
+  const card = el('div', 'end-card');
+  screen.appendChild(card);
+  container.appendChild(screen);
+
+  game.events.on('mission-end', (r: MissionResult) => {
+    const mins = Math.floor(r.time / 60);
+    const secs = Math.floor(r.time % 60).toString().padStart(2, '0');
+    const accuracy = r.shots > 0 ? Math.round((r.hits / r.shots) * 100) : 0;
+    card.className = 'end-card ' + (r.won ? 'won' : 'lost');
+    card.innerHTML = '';
+    const h = el('h1');
+    h.textContent = r.won ? 'Mission complete' : 'Mech destroyed';
+    const sub = el('p');
+    sub.textContent = r.won
+      ? 'All uplink towers destroyed. Payment arrives with the economy (milestone 5).'
+      : `Mission failed: ${r.targetsDestroyed} of ${r.targetsTotal} uplinks destroyed.`;
+    const stats = el('dl');
+    const rows: [string, string][] = [
+      ['Time', `${mins}:${secs}`],
+      ['Enemies destroyed', String(r.kills)],
+      ['Damage dealt', String(Math.round(r.damageDealt))],
+      ['Damage taken', String(Math.round(r.damageTaken))],
+      ['Accuracy', `${accuracy}%  (${r.hits}/${r.shots})`],
+      ['Ammo used', String(r.ammoUsed)],
+      ['Map seed', String(r.seed)],
+    ];
+    for (const [k, v] of rows) {
+      const dt = el('dt');
+      dt.textContent = k;
+      const dd = el('dd');
+      dd.textContent = v;
+      stats.append(dt, dd);
+    }
+    const actionsRow = el('div', 'end-actions');
+    button(actionsRow, 'New mission', () => restartMission(game)).classList.add('primary');
+    button(actionsRow, 'Retry this map', () => restartMission(game, r.seed));
+    card.append(h, sub, stats, actionsRow);
+    screen.classList.add('open');
+    play('ui', 1);
+  });
 }
 
 function fmt(v: number): string {

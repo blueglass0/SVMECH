@@ -26,12 +26,22 @@ export class MechView {
     showAimMarker: boolean,
   ) {
     const s = 1 / ART_SCALE;
-    this.legTick = scene.add.image(0, 0, 'leg-tick').setScale(s);
-    this.footL = scene.add.image(0, 0, 'mech-foot').setScale(s);
-    this.footR = scene.add.image(0, 0, 'mech-foot').setScale(s);
-    this.hips = scene.add.image(0, 0, 'mech-hips').setScale(s);
-    this.torso = scene.add.image(0, 0, 'mech-torso').setScale(s * TORSO_SCALE);
-    this.chevron = scene.add.image(0, 0, 'aim-chevron').setScale(s).setVisible(showAimMarker);
+    this.legTick = scene.add.image(0, 0, 'leg-tick').setScale(s).setDepth(3);
+    this.footL = scene.add.image(0, 0, 'mech-foot').setScale(s).setDepth(4);
+    this.footR = scene.add.image(0, 0, 'mech-foot').setScale(s).setDepth(4);
+    this.hips = scene.add.image(0, 0, 'mech-hips').setScale(s).setDepth(4);
+    this.torso = scene.add.image(0, 0, 'mech-torso').setScale(s * TORSO_SCALE).setDepth(6);
+    this.chevron = scene.add.image(0, 0, 'aim-chevron').setScale(s).setVisible(showAimMarker).setDepth(10);
+  }
+
+  /** Dim the mech (shutdown, destroyed). */
+  setAlpha(a: number): void {
+    for (const img of [this.footL, this.footR, this.hips, this.torso]) img.setAlpha(a);
+  }
+
+  setMarkersVisible(v: boolean): void {
+    this.chevron.setVisible(v);
+    this.legTick.setVisible(v);
   }
 
   update(dt: number): void {
