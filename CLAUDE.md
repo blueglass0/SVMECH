@@ -7,12 +7,17 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 **Milestone 1 — Foundation: built, awaiting the user's sign-off.**
 Do not start milestone 2 (Movement feel) until the user signs off M1.
 
+## Decisions made after the plan
+
+- **Phones are landscape-only.** In portrait, show a "rotate your device" prompt (build in M2).
+
 ## Stack
 
 - TypeScript (strict), Phaser 4, Vite 8. `npm run dev` (dev server, debug overlay on),
   `npm run build` (type-check + production build), `npm run preview`.
 - Deploy: `.github/workflows/deploy.yml` builds and publishes to GitHub Pages on every push to `main`.
-  Pages source must be set to "GitHub Actions" in the repo settings.
+  Pages source must be set to "GitHub Actions" in the repo settings. If it is "Deploy from a branch",
+  Pages serves the raw source and the game never loads.
 - Saves (from M5) go in `localStorage`.
 
 ## Layout
