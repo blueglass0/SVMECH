@@ -4,9 +4,10 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 
 ## Current milestone
 
-**Milestone 6 part 2 — Fog of war, line of sight, sensors (+ evac zone, shield tweak): built,
-awaiting the user's playtest.** M1–M5 and M6 part 1 signed off. After M6 sign-off, ask which
-milestone is next (plan order: 6b destructible terrain, then 7 hangar and backups).
+**Milestone 6b — Destructible terrain: built, awaiting the user's playtest.** M1–M6 signed off.
+Next by plan: 7 (hangar and backups, + contract tonnage limits and field stations).
+Deferred by the user: line-of-sight shadow rendering (logic already hides enemies behind
+walls); revisit as a graphics option, likely in M11.
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
 
 ## Decisions made after the plan
@@ -173,6 +174,24 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
 - Evac: when all targets are down, an evac zone opens ~650–890 units away (prefers spots far
   from living enemies); reaching it wins. Dying before evac fails the mission. Dev "Win
   mission": first press destroys targets, second finishes.
+
+## Destructible terrain notes (M6b)
+
+- Every obstacle has a `type` (`src/data/terrain.ts`): building, wall, rock (indestructible),
+  barrier, shed, tree, fence. Each has HP, a crush tonnage, whether it blocks shots and sight,
+  a splash multiplier (explosives wreck buildings), and a rubble style.
+- `CollisionWorld` keeps HP/alive per obstacle; every query skips destroyed ones. `raycast` has
+  modes ('shot' / 'sight'; fences and barriers don't block sight, fences don't block shots) and
+  leaves the hit index in `lastHit`. `damage(i)`, `obstaclesNear()`, and `onChange` callback.
+  `resolveCircle(..., crushTonnage)` destroys obstacles the unit can crush (`crushed` count).
+- Crush tonnage: mechs use chassis tonnage (Vulture 50: trees, fences, sheds); tanks 35
+  (`EnemyDef.crushTonnage`); barriers need 75 (heavies, M7). Crushing slows mechs slightly.
+- Map gen: solids (buildings, walls, rocks, barriers) keep the min-gap rule; props (trees,
+  fences, sheds) are crushable by every unit so they don't affect connectivity. NavGrid ignores
+  terrain tanks can crush and `refresh()`es the area when solid terrain collapses.
+- Drawing: `world/terrainArt.ts` draws by type and damage stage (intact, cracked, badly
+  damaged, rubble); a chunk's Graphics is redrawn only when one of its obstacles changes stage.
+  ~155 obstacles per map; measured map logic ~0.43 ms/frame.
 
 ## Conventions
 

@@ -14,6 +14,11 @@ export const DESTROY_TARGETS = {
     rockFields: [6, 9],
     walls: [10, 16],
     scatter: [35, 50],
+    /** Destructible terrain (milestone 6b). */
+    barriers: [8, 14],
+    forests: [3, 5],
+    fences: [5, 9],
+    sheds: [10, 18],
   },
   targets: 3,
   target: 'uplink',

@@ -1,6 +1,7 @@
 import type { ChassisMovement } from '../data/chassis';
 import type { ControlScheme } from '../core/settings';
 import type { Circle, CollisionWorld } from '../core/collision';
+import { CRUSH_SLOWDOWN } from '../data/terrain';
 import { DEG, approach, approachAngle, clamp, wrapAngle, type Vec } from '../core/math';
 
 /**
@@ -19,6 +20,8 @@ export class MechMotor {
   torsoAngle: number;
   /** Advances by PI per footstep; drives the walk animation. */
   stridePhase = 0;
+  /** Tonnage for crushing terrain by walking into it (see data/terrain.ts). */
+  crushTonnage = 0;
   /** Leg damage multipliers on top speed and turn rate (1 = undamaged). */
   speedFactor = 1;
   turnFactor = 1;
@@ -85,7 +88,10 @@ export class MechMotor {
     const oy = this.pos.y;
     this.pos.x += fx * this.speed * dt;
     this.pos.y += fy * this.speed * dt;
-    if (world.resolveCircle(this.pos, this.radius, bodies, self) && dt > 0) {
+    const blocked = world.resolveCircle(this.pos, this.radius, bodies, self, this.crushTonnage);
+    // Crushing a tree or shed costs a little momentum.
+    if (world.crushed > 0) this.speed *= Math.pow(CRUSH_SLOWDOWN, world.crushed);
+    if (blocked && dt > 0) {
       // Walking into something kills the speed you couldn't use; sliding along a wall keeps some.
       const along = ((this.pos.x - ox) * fx + (this.pos.y - oy) * fy) / dt;
       if (Math.abs(along) < Math.abs(this.speed)) this.speed = along;

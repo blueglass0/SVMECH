@@ -280,7 +280,7 @@ export class Tank extends Gunner {
     this.hullAngle = wrapAngle(approachAngle(this.hullAngle, targetAngle, (this.def.hullTurnRate ?? 90) * DEG * dt));
     this.speed = approach(this.speed, targetSpeed, (this.def.accel ?? 100) * dt);
     const pos = { x: this.x + Math.cos(this.hullAngle) * this.speed * dt, y: this.y + Math.sin(this.hullAngle) * this.speed * dt };
-    ctx.world.resolveCircle(pos, this.radius, ctx.bodies, this);
+    ctx.world.resolveCircle(pos, this.radius, ctx.bodies, this, this.def.crushTonnage ?? 0);
     const moved = Math.hypot(pos.x - this.x, pos.y - this.y);
     this.x = pos.x;
     this.y = pos.y;

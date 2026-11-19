@@ -117,6 +117,7 @@ export class Missiles {
       const ny = m.y + Math.sin(m.angle) * m.speed * dt;
 
       let t = this.world.raycast(m.x, m.y, nx, ny);
+      const wall = this.world.lastHit;
       let hitUnit: Unit | null = null;
       for (const u of this.units) {
         if (!u.alive || u.team === m.team) continue;
@@ -129,6 +130,7 @@ export class Missiles {
       if (t >= 0) {
         const hx = m.x + (nx - m.x) * t;
         const hy = m.y + (ny - m.y) * t;
+        if (!hitUnit && wall >= 0) this.world.damage(wall, m.damage);
         this.detonate(m, hitUnit, hx, hy);
         continue;
       }

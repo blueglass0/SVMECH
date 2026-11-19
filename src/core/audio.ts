@@ -6,14 +6,14 @@
  */
 import { settings, saveSettings } from './settings';
 
-export type SoundId = 'mg' | 'cannon' | 'laser' | 'missile' | 'flare' | 'shield' | 'lock' | 'hit' | 'explode' | 'bigExplode' | 'warn' | 'ui';
+export type SoundId = 'mg' | 'cannon' | 'laser' | 'missile' | 'flare' | 'shield' | 'lock' | 'crunch' | 'collapse' | 'hit' | 'explode' | 'bigExplode' | 'warn' | 'ui';
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let noise: AudioBuffer | null = null;
 /** Last play time per sound, to stop rapid-fire weapons stacking into noise. */
 const last: Partial<Record<SoundId, number>> = {};
-const MIN_GAP: Partial<Record<SoundId, number>> = { mg: 0.045, hit: 0.05, cannon: 0.04, warn: 0.3, missile: 0.08, lock: 0.25 };
+const MIN_GAP: Partial<Record<SoundId, number>> = { mg: 0.045, hit: 0.05, cannon: 0.04, warn: 0.3, missile: 0.08, lock: 0.25, crunch: 0.06, collapse: 0.15 };
 
 function init(): void {
   if (ctx) return;
@@ -77,6 +77,13 @@ export function play(id: SoundId, volume = 1): void {
       break;
     case 'lock':
       tone(now, 'square', 1500, 1500, 0.05, 0.06 * v);
+      break;
+    case 'crunch':
+      burst(now, 0.12, 1800, 'bandpass', 0.35 * v, 0.9);
+      break;
+    case 'collapse':
+      burst(now, 1.1, 300, 'lowpass', 0.9 * v);
+      burst(now, 0.6, 1400, 'bandpass', 0.25 * v, 0.6);
       break;
     case 'hit':
       burst(now, 0.04, 3500, 'highpass', 0.25 * v);

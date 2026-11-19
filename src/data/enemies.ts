@@ -21,6 +21,8 @@ export interface EnemyDef {
   preferredRange?: number;
   /** 0 = aims at the player, 1 = leads perfectly. */
   aimLead?: number;
+  /** Tanks: crush terrain up to this tonnage by driving into it (see data/terrain.ts). */
+  crushTonnage?: number;
 }
 
 export const ENEMIES: Record<string, EnemyDef> = {
@@ -38,6 +40,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     detectRange: 650,
     preferredRange: 380,
     aimLead: 0.5,
+    crushTonnage: 35,
   },
   missileTank: {
     id: 'missileTank',
@@ -53,6 +56,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     detectRange: 700,
     preferredRange: 520,
     aimLead: 0,
+    crushTonnage: 35,
   },
   gunTurret: {
     id: 'gunTurret',
