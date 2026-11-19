@@ -42,6 +42,8 @@ const CHUNK = 800;
 const END_DELAY = 1.8;
 /** Reach within this distance of the evac point to finish. */
 const EVAC_RADIUS = 80;
+/** The evac zone opens at least this far from where the mech is. */
+const EVAC_MIN_DISTANCE = 650;
 /** Enemies within this distance of a unit that gets shot join the fight. */
 const ALERT_RADIUS = 650;
 
@@ -302,25 +304,30 @@ export class MapScene extends Phaser.Scene {
     return best;
   }
 
-  /** Objectives done: open an evac zone a short walk away, preferably away from enemies. */
+  /** Objectives done: open an evac zone a good walk away, preferably away from enemies. */
   private openEvac(): void {
     const p = this.player;
     let best: Vec | null = null;
     let bestScore = -Infinity;
-    for (let i = 0; i < 32; i++) {
-      const a = (i / 32) * Math.PI * 2;
-      const d = 650 + (i % 3) * 120;
-      const x = p.x + Math.cos(a) * d;
-      const y = p.y + Math.sin(a) * d;
-      if (this.world.circleBlocked(x, y, EVAC_RADIUS)) continue;
-      let nearest = 2000;
-      for (const e of this.enemies) if (e.alive) nearest = Math.min(nearest, Math.hypot(e.x - x, e.y - y));
-      if (nearest > bestScore) {
-        bestScore = nearest;
-        best = { x, y };
+    // Rings from EVAC_MIN_DISTANCE outward; points off the map or in obstacles are skipped.
+    for (let ring = 0; ring < 5; ring++) {
+      const d = EVAC_MIN_DISTANCE + ring * 150;
+      for (let i = 0; i < 32; i++) {
+        const a = (i / 32) * Math.PI * 2 + ring * 0.1;
+        const x = p.x + Math.cos(a) * d;
+        const y = p.y + Math.sin(a) * d;
+        if (this.world.circleBlocked(x, y, EVAC_RADIUS)) continue;
+        let nearest = 2000;
+        for (const e of this.enemies) if (e.alive) nearest = Math.min(nearest, Math.hypot(e.x - x, e.y - y));
+        // Prefer away from enemies, and not much further than needed.
+        const score = nearest - ring * 60;
+        if (score > bestScore) {
+          bestScore = score;
+          best = { x, y };
+        }
       }
     }
-    // Fallback: the drop point is always clear.
+    // Practically never needed: the drop point is always clear.
     this.evac = best ?? { x: this.map.spawn.x, y: this.map.spawn.y };
     this.evacImg = this.add.image(this.evac.x, this.evac.y, 'evac').setScale(1 / ART_SCALE).setDepth(2);
     hud.objectiveLabel = 'Reach the evac zone';

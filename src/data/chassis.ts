@@ -90,7 +90,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
       decel: 120,
       legTurnRate: 80,
       legTurnAccel: 240,
-      torsoTurnRate: 120,
+      torsoTurnRate: 90,
       strideLength: 46,
       stepShake: 0.0012,
     },
@@ -105,7 +105,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
       { id: 'ra-e', section: 'rightArm', type: 'energy', x: 24, y: 27 },
       { id: 't-m', section: 'torso', type: 'missile', x: 4, y: -10 },
     ],
-    vision: { coneDeg: 55, range: 620, radius: 210 },
+    vision: { coneDeg: 42, range: 620, radius: 160 },
   },
 };
 

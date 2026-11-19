@@ -157,6 +157,9 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   Enemy missile carriers (`missileTank`) fire seeking missiles; HUD warns "MISSILE INCOMING".
 - Vulture: base 30 t + equipment, 8 slots, torso missile hardpoint, base cooling 6/s.
 - Shield (after M6 feedback): 7 s, 160 capacity, +3 heat/s while up, 16 s cooldown.
+- After M6 part 2 feedback: Vulture vision cone 42° half-angle, close radius 160, torso turn
+  90°/s (starter should feel deliberate; lights can turn faster). Sensors buffed (suite +200
+  range/+20°, radar array +280/+28°, radar 620). Evac opens ≥650 units away (rings to 1250).
 
 ## Fog of war and evac notes (M6 part 2)
 
@@ -171,7 +174,7 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   drawn as one rotated sprite. Setting `settings.fog`: 'faded' (default, terrain dimly visible)
   or 'dark'; toggle in the pause menu. Dev: `?nofog` or the Tune panel's fog toggle.
   No occlusion shadows behind buildings (that's the expensive version; logic still uses LOS).
-- Evac: when all targets are down, an evac zone opens ~650–890 units away (prefers spots far
+- Evac: when all targets are down, an evac zone opens 650–1250 units away (prefers spots far
   from living enemies); reaching it wins. Dying before evac fails the mission. Dev "Win
   mission": first press destroys targets, second finishes.
 
