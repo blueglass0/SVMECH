@@ -5,6 +5,7 @@ import { BootScene } from './scenes/BootScene';
 import { MapScene } from './scenes/MapScene';
 import { HudScene } from './scenes/HudScene';
 import { mountDomUi } from './ui/dom';
+import { installAudioUnlock } from './core/audio';
 
 const container = document.getElementById('game')!;
 document.getElementById('boot')?.remove();
@@ -34,6 +35,7 @@ const game = new Phaser.Game({
 
 trackViewport(game, container);
 mountDomUi(game, container);
+installAudioUnlock();
 
 if (import.meta.env.DEV) {
   (window as unknown as { game: Phaser.Game }).game = game;

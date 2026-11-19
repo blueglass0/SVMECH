@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { CONTROLS } from '../../config/controls';
 import { Viewport } from '../viewport';
-import { actions, sticks, type StickView } from './actions';
+import { actions, sticks, touchButtons, type StickView } from './actions';
 
 interface StickTrack {
   pointerId: number | null;
@@ -16,6 +16,7 @@ interface StickTrack {
 export class TouchSource {
   private left: StickTrack = { pointerId: null, view: sticks.left };
   private right: StickTrack = { pointerId: null, view: sticks.right };
+  private fire2Pointer: number | null = null;
 
   constructor(scene: Phaser.Scene) {
     const input = scene.input;
@@ -32,6 +33,8 @@ export class TouchSource {
     const r = this.right.view;
     r.baseX = r.knobX = rx;
     r.baseY = r.knobY = ry;
+    touchButtons.fire2.x = rx + CONTROLS.fire2Offset.x;
+    touchButtons.fire2.y = ry + CONTROLS.fire2Offset.y;
     if (this.right.pointerId !== null) this.reset();
     if (this.left.pointerId === null) {
       const l = this.left.view;
@@ -43,6 +46,9 @@ export class TouchSource {
   reset(): void {
     this.release(this.left);
     this.release(this.right);
+    this.fire2Pointer = null;
+    touchButtons.fire2.pressed = false;
+    actions.fire2 = false;
     this.layout();
   }
 
@@ -53,7 +59,13 @@ export class TouchSource {
     const y = p.y / Viewport.renderScale;
     const R = CONTROLS.stickRadius;
     const rc = rightCentre();
-    if (this.right.pointerId === null && Math.hypot(x - rc.x, y - rc.y) <= R * CONTROLS.rightStickGrab) {
+    const b = touchButtons.fire2;
+    // Buttons take priority where they overlap the right stick's grab area.
+    if (this.fire2Pointer === null && Math.hypot(x - b.x, y - b.y) <= CONTROLS.buttonRadius * 1.15) {
+      this.fire2Pointer = p.id;
+      b.pressed = true;
+      actions.fire2 = true;
+    } else if (this.right.pointerId === null && Math.hypot(x - rc.x, y - rc.y) <= R * CONTROLS.rightStickGrab) {
       this.right.pointerId = p.id;
       this.right.view.active = true;
       this.drag(this.right, x, y, false);
@@ -77,6 +89,11 @@ export class TouchSource {
   }
 
   private onUp(p: Phaser.Input.Pointer): void {
+    if (p.id === this.fire2Pointer) {
+      this.fire2Pointer = null;
+      touchButtons.fire2.pressed = false;
+      actions.fire2 = false;
+    }
     if (p.id === this.left.pointerId) this.release(this.left);
     else if (p.id === this.right.pointerId) this.release(this.right);
     if (this.left.pointerId === null) this.layout();

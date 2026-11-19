@@ -4,7 +4,8 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 
 ## Current milestone
 
-**Milestone 3 — Combat core: in progress.** M1 and M2 signed off.
+**Milestone 3 — Combat core: built, awaiting the user's playtest and sign-off.** M1 and M2 signed off.
+Do not start milestone 4 (Locational damage) until the user signs off M3.
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
 
 ## Decisions made after the plan
@@ -33,9 +34,15 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
 - `src/config/` — engine and display settings (render budget, view size).
 - `src/data/` — game content and balance numbers (mechs, weapons, economy, maps). No logic.
 - `src/core/` — shared engine-level systems: viewport sizing, input layer (`core/input/`),
-  collision, settings (localStorage), math, debug flag.
-- `src/game/` — gameplay objects. Logic and rendering are split: `MechMotor` (pure movement
-  logic, no Phaser) and `MechView` (sprites). `art.ts` bakes all vector art to textures at boot.
+  collision (`CollisionWorld`: grid-bucketed obstacles, push-out, raycasts), seeded RNG,
+  synthesized audio (`audio.ts`, Web Audio, no files), settings (localStorage), math, debug flag.
+- `src/game/` — gameplay. Logic and rendering are split where it matters: `MechMotor` (pure
+  movement logic, no Phaser) and `MechView` (sprites). `art.ts` bakes all vector art at boot.
+  - `units/` — `PlayerMech` (weapons, heat, ammo, armor) and `Enemies` (tank, turret, structure + AI).
+  - `combat/` — `Combat` (pooled projectiles and beams, hit tests), `Effects` (pooled sparks,
+    explosions, smoke, scorch), `types.ts` (`Unit`: anything shots can hit).
+  - `world/` — `mapgen.ts` (seeded procedural maps), `NavGrid.ts` (A* for tanks).
+  - `hudState.ts` — plain data the map scene publishes and the HUD reads.
 - `src/scenes/` — Phaser scenes. `Boot` (bakes art) → `Map` (world) + `Hud` (screen-space UI, laid out in CSS px).
 - `src/ui/` — HTML/DOM UI over the canvas (toolbar, tuning panel; later menus, shop, loadout).
   Menus belong in the DOM, not in Phaser: crisp, cheap, and touches on them never reach the sticks.
@@ -50,8 +57,10 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   control scheme (tank/direction, per device, stored in settings) and whether touch sticks show.
 - **Ship every milestone.** Each ends deployed to Pages with a short "what to test" note. The next
   milestone starts only after sign-off. Leave room for later systems but don't build them early.
-- **Dev tools.** Debug overlay (fps, renderer, resolution; later hit arcs) shows in dev or with
-  `?debug` in the URL. Dev menu (money, spawn enemies, skip mission) arrives with the systems it needs.
+- **Dev tools.** Debug overlay (fps, worst frame, renderer, resolution, map seed; later hit arcs)
+  shows in dev or with `?debug` in the URL. The Tune panel (debug only) has movement sliders and
+  dev buttons: win mission, spawn tank, invulnerable, refill, new map. Add money etc. with M5.
+  `?seed=N` replays a specific map; the end screen shows each map's seed.
 - **Update this file** when a milestone changes state.
 
 ## Performance rules (the game must run on most hardware, including low-end PCs and phones)
@@ -61,7 +70,12 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   ~1080p worth of pixels; bigger screens render lower and stretch. Don't bypass it.
 - `Phaser.AUTO`: WebGL with Canvas 2D fallback. Keep everything working in Canvas mode
   (avoid WebGL-only filters/shaders for anything gameplay-critical).
-- Pool bullets, effects and enemies; never create/destroy per shot. Cap particles.
+- Pool bullets, effects and enemies; never create/destroy per shot. Cap particles. Pools are
+  fixed-size (shots 240, beams 8, sparks 64...); effect pools are round-robin (oldest reused).
+- No tint: Canvas mode doesn't support it. Colour variants are separate baked textures
+  (e.g. `px-*` swatches for bars, `*-wreck` textures for destroyed units).
+- Obstacles are drawn once into per-chunk Graphics (800×800 world units); off-screen chunks are
+  hidden each frame. Measured M3 game logic: ~0.1–0.25 ms/frame with 16 enemies and full fire.
 - Bake static vector art into textures once (in `Boot`) instead of redrawing Graphics every frame.
   Static Graphics are fine for a few hundred simple shapes; per-frame `clear()`+redraw is not.
 - Text re-renders a texture on every `setText`: update HUD text only when the value changes,
@@ -71,6 +85,17 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   1/60 s when the window is unfocused, which slows the whole game down. Scenes clamp dt to 100 ms.
 - Keep the bundle lean: no heavy dependencies without a reason. Phaser is split into its own
   cached chunk.
+
+## Gameplay notes (M3)
+
+- Map generation keeps every obstacle `minGap` (100) from every other obstacle and the map edge,
+  so all open ground is connected; validated over 300 seeds (all targets and tanks reachable).
+- Weapons fire along the torso facing from their hardpoint position (no convergence on the
+  cursor), so the slow torso matters. Laser is hitscan; ballistics are projectiles.
+- Phone aim assist: stick aim bends halfway toward an enemy within 12° and 650 units.
+- Enemies alert neighbours within 650 units when shot. Tanks path with A* (repath ~1.5 s).
+- Player armor is a single pool in M3; M4 splits it per section (`Unit.takeDamage` already
+  receives the shot origin for hit-angle detection).
 
 ## Conventions
 

@@ -3,7 +3,7 @@ import { clearHeldActions } from './actions';
 import { KeyboardMouseSource } from './keyboardMouse';
 import { TouchSource } from './touch';
 
-export { actions, sticks } from './actions';
+export { actions, sticks, touchButtons } from './actions';
 
 /**
  * The one input layer. Owns the input sources; game code calls `update()`

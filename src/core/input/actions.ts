@@ -50,6 +50,17 @@ export const sticks: { left: StickView; right: StickView } = {
   right: { active: false, baseX: 0, baseY: 0, knobX: 0, knobY: 0 },
 };
 
+/** On-screen buttons in CSS pixels, for the HUD to draw. */
+export interface ButtonView {
+  x: number;
+  y: number;
+  pressed: boolean;
+}
+
+export const touchButtons: { fire2: ButtonView } = {
+  fire2: { x: 0, y: 0, pressed: false },
+};
+
 export function clearHeldActions(): void {
   actions.move.x = 0;
   actions.move.y = 0;

@@ -128,6 +128,172 @@ export function bakeArt(scene: Phaser.Scene): void {
   );
 }
 
+const E = {
+  hull: 0x5b6450,
+  hullDark: 0x3d4436,
+  edge: 0x9aa58a,
+  accent: 0xff5a4f,
+};
+
+/** Enemy art, projectiles, effects and HUD pieces. */
+export function bakeCombatArt(scene: Phaser.Scene): void {
+  // Tank hull: tracks either side, body, red sensor light at the front.
+  for (const wreck of [false, true]) {
+    const k = wreck ? 'tank-hull-wreck' : 'tank-hull';
+    bake(scene, k, 64, 52, (g) => {
+      const a = wreck ? 0.55 : 1;
+      g.fillStyle(wreck ? 0x232628 : C.hullDark, 1);
+      g.fillRoundedRect(-28, -24, 56, 12, 3);
+      g.fillRoundedRect(-28, 12, 56, 12, 3);
+      g.fillStyle(wreck ? 0x2e3330 : E.hull, 1).fillRoundedRect(-24, -15, 48, 30, 5);
+      g.lineStyle(1.5, wreck ? 0x45494a : E.edge, a).strokeRoundedRect(-24, -15, 48, 30, 5);
+      if (!wreck) g.fillStyle(E.accent).fillRect(19, -4, 4, 8);
+    });
+  }
+  bake(scene, 'tank-turret', 60, 30, (g) => {
+    g.fillStyle(E.hullDark).fillRect(6, -3, 22, 6);
+    g.fillStyle(E.hull).fillCircle(0, 0, 11);
+    g.lineStyle(1.5, E.edge).strokeCircle(0, 0, 11);
+  });
+
+  // Turrets: armoured base and a rotating gun.
+  for (const wreck of [false, true]) {
+    bake(scene, wreck ? 'turret-base-wreck' : 'turret-base', 56, 56, (g) => {
+      g.fillStyle(wreck ? 0x26292b : E.hullDark);
+      g.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+        if (i === 0) g.moveTo(Math.cos(a) * 25, Math.sin(a) * 25);
+        else g.lineTo(Math.cos(a) * 25, Math.sin(a) * 25);
+      }
+      g.closePath();
+      g.fillPath();
+      g.lineStyle(1.5, wreck ? 0x45494a : E.edge, 1).strokePath();
+    });
+  }
+  bake(scene, 'turret-gun', 64, 30, (g) => {
+    g.fillStyle(E.hullDark).fillRect(6, -5, 22, 3).fillRect(6, 2, 22, 3);
+    g.fillStyle(E.hull).fillCircle(0, 0, 12);
+    g.lineStyle(1.5, E.edge).strokeCircle(0, 0, 12);
+    g.fillStyle(E.accent).fillCircle(4, 0, 3);
+  });
+  bake(scene, 'turret-cannon', 72, 34, (g) => {
+    g.fillStyle(E.hullDark).fillRect(8, -4, 26, 8);
+    g.fillStyle(E.hull).fillRoundedRect(-13, -13, 26, 26, 5);
+    g.lineStyle(1.5, E.edge).strokeRoundedRect(-13, -13, 26, 26, 5);
+    g.fillStyle(E.accent).fillCircle(3, 0, 3);
+  });
+
+  // Uplink tower (mission target): mast with dish arms and a pulsing core.
+  for (const wreck of [false, true]) {
+    bake(scene, wreck ? 'uplink-wreck' : 'uplink', 92, 92, (g) => {
+      const edge = wreck ? 0x45494a : 0xe8a33d;
+      g.fillStyle(wreck ? 0x232628 : 0x2a3036).fillCircle(0, 0, 38);
+      g.lineStyle(2.5, edge, wreck ? 0.6 : 1).strokeCircle(0, 0, 38);
+      g.lineStyle(4, wreck ? 0x3a3e40 : 0x7d8890);
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2;
+        g.lineBetween(Math.cos(a) * 10, Math.sin(a) * 10, Math.cos(a) * 30, Math.sin(a) * 30);
+      }
+      if (!wreck) {
+        g.fillStyle(0xff5a4f).fillCircle(0, 0, 9);
+        g.lineStyle(2, 0xffb0a8).strokeCircle(0, 0, 9);
+      }
+    });
+  }
+
+  // Projectiles (drawn along +x).
+  bake(scene, 'bullet', 14, 4, (g) => {
+    g.fillStyle(0xfff1b8).fillRoundedRect(-6, -1.5, 12, 3, 1.5);
+  });
+  bake(scene, 'bullet-enemy', 14, 4, (g) => {
+    g.fillStyle(0xff9a8a).fillRoundedRect(-6, -1.5, 12, 3, 1.5);
+  });
+  bake(scene, 'shell', 20, 8, (g) => {
+    g.fillStyle(0xffc561).fillRoundedRect(-8, -3, 16, 6, 3);
+    g.fillStyle(0xffffff).fillRoundedRect(0, -1.5, 7, 3, 1.5);
+  });
+  bake(scene, 'shell-enemy', 20, 8, (g) => {
+    g.fillStyle(0xff6a55).fillRoundedRect(-8, -3, 16, 6, 3);
+    g.fillStyle(0xffd0c8).fillRoundedRect(0, -1.5, 7, 3, 1.5);
+  });
+  // Laser beam: 64 long, stretched to length. Bright core with a soft glow.
+  bake(scene, 'beam', 64, 12, (g) => {
+    g.fillStyle(0x4fd8ff, 0.25).fillRect(-32, -5, 64, 10);
+    g.fillStyle(0x7fe6ff, 0.6).fillRect(-32, -2.5, 64, 5);
+    g.fillStyle(0xffffff, 1).fillRect(-32, -1, 64, 2);
+  });
+
+  // Effects.
+  bake(scene, 'spark', 8, 8, (g) => {
+    g.fillStyle(0xffe08a).fillCircle(0, 0, 2.5);
+  });
+  bake(scene, 'flash', 40, 40, (g) => {
+    g.fillStyle(0xffd27a, 0.35).fillCircle(0, 0, 18);
+    g.fillStyle(0xfff3c9, 0.9).fillCircle(0, 0, 8);
+  });
+  bake(scene, 'ring', 100, 100, (g) => {
+    g.lineStyle(5, 0xffb347, 1).strokeCircle(0, 0, 44);
+  });
+  bake(scene, 'smoke', 40, 40, (g) => {
+    g.fillStyle(0x2a2d30, 0.7).fillCircle(0, 0, 18);
+  });
+  bake(scene, 'scorch', 120, 120, (g) => {
+    g.fillStyle(0x0d0f10, 0.35).fillCircle(0, 0, 56);
+    g.fillStyle(0x0d0f10, 0.35).fillCircle(0, 0, 38);
+  });
+
+  // Solid swatches for bars (scaled with setDisplaySize; no tint, so Canvas mode works).
+  const swatches: Record<string, [number, number]> = {
+    'px-white': [0xffffff, 1],
+    'px-bg': [0x0b0e11, 0.75],
+    'px-armor': [0x8fd16a, 1],
+    'px-heat': [0xe8a33d, 1],
+    'px-hot': [0xff4d3d, 1],
+    'px-enemy': [0xff5a4f, 1],
+    'px-dim': [0x56616b, 1],
+    'px-cyan': [0x4fd8ff, 1],
+  };
+  for (const [key, [color, alpha]] of Object.entries(swatches)) {
+    bake(scene, key, 4, 4, (g) => g.fillStyle(color, alpha).fillRect(-2, -2, 4, 4), 1);
+  }
+
+  // Off-screen indicators (HUD, CSS px, baked at 3x). Point along +x.
+  bake(
+    scene,
+    'edge-target',
+    30,
+    30,
+    (g) => {
+      g.fillStyle(0xe8a33d).fillTriangle(12, 0, -6, -9, -6, 9);
+      g.lineStyle(2, 0x0b0e11, 0.8).strokeTriangle(12, 0, -6, -9, -6, 9);
+    },
+    3,
+  );
+  bake(
+    scene,
+    'edge-threat',
+    22,
+    22,
+    (g) => {
+      g.fillStyle(0xff5a4f, 0.9).fillTriangle(8, 0, -4, -6, -4, 6);
+    },
+    3,
+  );
+  // Phone fire button.
+  bake(
+    scene,
+    'button',
+    84,
+    84,
+    (g) => {
+      g.fillStyle(0xffffff, 0.08).fillCircle(0, 0, 40);
+      g.lineStyle(2, 0xffffff, 0.4).strokeCircle(0, 0, 40);
+    },
+    3,
+  );
+}
+
 /** Ground grid as one repeating tile (cheaper than hundreds of lines). */
 export function bakeGroundTile(
   scene: Phaser.Scene,
