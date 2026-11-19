@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0b0e11" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <title>Steel Vulture</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: #0b0e11;
+        overflow: hidden;
+        /* No scrolling, pull-to-refresh, pinch zoom, text selection or callouts while playing. */
+        overscroll-behavior: none;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      body {
+        /* Keep the game clear of notches and rounded corners; the background fills the rest. */
+        box-sizing: border-box;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+          env(safe-area-inset-left);
+        height: 100vh;
+        height: 100dvh;
+      }
+      #game {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+      /* The canvas backing size is set in code (render budget); CSS always stretches it to fill. */
+      #game canvas {
+        display: block;
+        width: 100% !important;
+        height: 100% !important;
+      }
+      #boot {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #6f7b85;
+        font: 14px/1.4 system-ui, sans-serif;
+        letter-spacing: 0.2em;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game"><div id="boot">LOADING…</div></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
