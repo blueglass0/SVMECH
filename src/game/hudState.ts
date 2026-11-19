@@ -35,6 +35,9 @@ export const hud = {
   objectiveDone: 0,
   objectiveTotal: 0,
   briefing: '',
+  /** Contract bonus objective. */
+  bonusLabel: '',
+  bonusState: 'open' as 'open' | 'done' | 'failed',
   /** performance.now() of the last hit taken, for the damage flash. */
   lastHit: 0,
   /** Camera view in world units, for off-screen indicators. */

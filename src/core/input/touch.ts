@@ -138,7 +138,7 @@ export class TouchSource {
         actions.aim.x = nx;
         actions.aim.y = ny;
       }
-      this.setStickFire(out > 0);
+      this.setStickFire(out >= CONTROLS.fireThreshold);
     }
   }
 

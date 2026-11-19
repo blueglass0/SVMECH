@@ -4,7 +4,8 @@ import type { ControlScheme } from '../../core/settings';
 import type { Vec } from '../../core/math';
 import { CHASSIS, type ChassisDef, type ChassisMovement, type MountDef, type Section } from '../../data/chassis';
 import { SectionDamage } from './SectionDamage';
-import { HEAT_RULES, type Loadout } from '../../data/loadouts';
+import { HEAT_RULES } from '../../data/loadouts';
+import type { MechState } from '../../career/types';
 import { WEAPONS, type WeaponDef } from '../../data/weapons';
 import { MechMotor } from '../MechMotor';
 import { MechView } from '../MechView';
@@ -47,20 +48,40 @@ export class PlayerMech implements Unit {
   onSectionDestroyed?: (section: Section) => void;
   stats = { shots: 0, damageTaken: 0, ammoUsed: 0 };
 
-  constructor(scene: Phaser.Scene, loadout: Loadout, movement: ChassisMovement, x: number, y: number, angle: number) {
-    this.chassis = CHASSIS[loadout.chassis];
+  constructor(scene: Phaser.Scene, state: MechState, movement: ChassisMovement, x: number, y: number, angle: number) {
+    this.chassis = CHASSIS[state.chassis];
     this.radius = this.chassis.radius;
     this.sections = new SectionDamage(this.chassis.sections);
-    this.ammo = { ...this.chassis.ammoCapacity };
+    // Carry damage over from earlier missions (unrepaired sections).
+    this.sections.hp = { ...state.sections };
+    this.ammo = { ...state.ammo };
     this.motor = new MechMotor(movement, this.radius, x, y, angle);
     this.view = new MechView(scene, this.motor, true);
-    this.weapons = loadout.weapons.map((w) => ({
+    this.weapons = state.weapons.map((w) => ({
       def: WEAPONS[w.weapon],
       mount: this.chassis.mounts.find((m) => m.id === w.mount)!,
       group: w.group,
       cooldown: 0,
       destroyed: false,
     }));
+    for (const side of ['leftArm', 'rightArm'] as const) {
+      if (this.sections.destroyed(side)) {
+        for (const w of this.weapons) if (w.mount.section === side) w.destroyed = true;
+        this.view.setArm(side, false);
+      }
+    }
+    this.updateLegs();
+  }
+
+  /** The mech's state to carry back to the career after the mission. */
+  toState(): MechState {
+    return {
+      chassis: this.chassis.id,
+      weapons: this.weapons.map((w) => ({ mount: w.mount.id, weapon: w.def.id, group: w.group })),
+      sections: { ...this.sections.hp },
+      ammo: { ...this.ammo },
+      destroyed: !this.alive,
+    };
   }
 
   /** Total armor left (Unit interface; enemies don't use it for the player). */
@@ -141,14 +162,26 @@ export class PlayerMech implements Unit {
     return Math.min(1, this.heat / this.chassis.heatCapacity);
   }
 
-  takeDamage(amount: number, fromX: number, fromY: number): void {
+  takeDamage(amount: number, fromX: number, fromY: number, hitX?: number, hitY?: number): void {
     if (!this.alive) return;
     const worldAngle = Math.atan2(fromY - this.y, fromX - this.x);
     this.lastHit = performance.now();
     this.lastHitAngle = worldAngle;
     if (this.invulnerable) return;
     const before = this.sections.total;
-    const hit = this.sections.apply(amount, worldAngle - this.motor.torsoAngle);
+    // The section is picked by where the shot struck the mech's outline: arms are either
+    // side of the torso, so off-centre hits from the front land on an arm.
+    const strike = hitX !== undefined && hitY !== undefined ? Math.atan2(hitY - this.y, hitX - this.x) : worldAngle;
+    const hit = this.sections.apply(amount, strike - this.motor.torsoAngle);
+    this.stats.damageTaken += before - this.sections.total;
+    for (const s of hit.destroyed) this.loseSection(s);
+    this.updateLegs();
+  }
+
+  takeSplash(amount: number): void {
+    if (!this.alive || this.invulnerable) return;
+    const before = this.sections.total;
+    const hit = this.sections.applySplash(amount);
     this.stats.damageTaken += before - this.sections.total;
     for (const s of hit.destroyed) this.loseSection(s);
     this.updateLegs();

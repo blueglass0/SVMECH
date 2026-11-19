@@ -2,13 +2,15 @@
  * Locational damage rules for mechs (player now, enemy mechs from milestone 8).
  * Tanks, turrets and structures have a single HP bar instead.
  *
- * Which section a shot hits depends on where it comes from relative to the
- * torso facing: front -> torso, either side -> that arm, behind -> torso,
- * with extra damage (thinner rear armor). Legs take a share of every hit.
+ * Which section a shot hits depends on where it strikes the mech's outline,
+ * as an angle from the torso facing: the front centre -> torso, the sides
+ * (including off-centre hits from the front) -> that arm, the rear centre ->
+ * torso with extra damage (thinner rear armor). Legs take a share of every
+ * hit, plus ground bursts from shells (splash).
  */
 export const DAMAGE_RULES = {
-  /** Half-angle of the front arc, degrees. Shots inside it hit the torso. */
-  frontDeg: 50,
+  /** Half-angle of the front arc, degrees. Strikes inside it hit the torso. */
+  frontDeg: 25,
   /** Half-angle of the rear arc, degrees (measured from straight behind). */
   rearDeg: 40,
   /** Damage multiplier for hits from behind. */

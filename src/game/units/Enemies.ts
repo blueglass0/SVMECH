@@ -137,6 +137,15 @@ abstract class Gunner extends Enemy {
     this.gunAngle = angle;
   }
 
+  /** Distance to where the shot is aimed (the led target point): splash shells burst there. */
+  protected aimDistance(p: PlayerMech): number {
+    const d = Math.hypot(p.x - this.x, p.y - this.y);
+    if (this.weapon.projectileSpeed <= 0) return d;
+    const t = d / this.weapon.projectileSpeed;
+    const lead = this.def.aimLead ?? 0;
+    return Math.hypot(p.x + p.vx * t * lead - this.x, p.y + p.vy * t * lead - this.y);
+  }
+
   /** Turn the gun toward the player (or `idleAngle`) and fire when lined up. */
   protected aimAndFire(dt: number, ctx: AiContext, idleAngle: number, muzzle: number): void {
     const p = ctx.player;
@@ -148,7 +157,7 @@ abstract class Gunner extends Enemy {
     if (d > this.weapon.range || Math.abs(wrapAngle(want - this.gunAngle)) > 6 * DEG) return;
     const mx = this.x + Math.cos(this.gunAngle) * muzzle;
     const my = this.y + Math.sin(this.gunAngle) * muzzle;
-    ctx.combat.fire(mx, my, this.gunAngle, this.weapon, 'enemy', ctx.difficulty.enemyDamage, ctx.difficulty.enemySpread);
+    ctx.combat.fire(mx, my, this.gunAngle, this.weapon, 'enemy', ctx.difficulty.enemyDamage, ctx.difficulty.enemySpread, this.aimDistance(p) - muzzle);
     // A little randomness so groups don't fire in lockstep.
     this.cooldown = (1 / this.weapon.fireRate) * (0.85 + Math.random() * 0.3);
   }

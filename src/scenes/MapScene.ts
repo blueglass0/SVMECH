@@ -2,9 +2,7 @@ import Phaser from 'phaser';
 import { DISPLAY } from '../config/display';
 import { CAMERA } from '../config/controls';
 import { CHASSIS, STARTER_CHASSIS, type ChassisMovement } from '../data/chassis';
-import { STARTER_LOADOUT } from '../data/loadouts';
 import { DESTROY_TARGETS, MISSION_THEME } from '../data/missions';
-import { ACTIVE_COMBAT_DIFFICULTY, COMBAT_DIFFICULTY } from '../data/difficulty';
 import { Viewport } from '../core/viewport';
 import { InputSystem, actions } from '../core/input';
 import { settings } from '../core/settings';
@@ -23,22 +21,16 @@ import { Effects } from '../game/combat/Effects';
 import type { Unit } from '../game/combat/types';
 import { hud } from '../game/hudState';
 import { PlayerMech } from '../game/units/PlayerMech';
-import { Enemy, Structure, createEnemy, type AiContext } from '../game/units/Enemies';
+import { Enemy, Structure, Tank, Turret, createEnemy, type AiContext } from '../game/units/Enemies';
 import { NavGrid } from '../game/world/NavGrid';
 import { generateDestroyTargets, type MissionMap } from '../game/world/mapgen';
+import type { MissionConfig, MissionOutcome } from '../career/types';
+import { newCareer } from '../career/career';
 
-export interface MissionResult {
-  won: boolean;
-  seed: number;
-  time: number;
-  kills: number;
-  targetsDestroyed: number;
-  targetsTotal: number;
-  damageDealt: number;
-  damageTaken: number;
-  shots: number;
-  hits: number;
-  ammoUsed: number;
+/** Mission config for quick dev runs without a career (?quick). */
+function quickConfig(seed: number): MissionConfig {
+  const c = newCareer('normal', 'normal');
+  return { contract: { ...c.contracts[0], seed }, mech: c.mech, enemyCount: 1, enemySpread: 1, enemyDamage: 1 };
 }
 
 /** Live movement numbers: the tuning panel edits this, and it survives mission restarts. */
@@ -53,6 +45,8 @@ const ALERT_RADIUS = 650;
 export class MapScene extends Phaser.Scene {
   movement: ChassisMovement = liveMovement;
   seed = 0;
+  private config!: MissionConfig;
+  private withdrew = false;
   private map!: MissionMap;
   private world!: CollisionWorld;
   private controls!: InputSystem;
@@ -85,9 +79,11 @@ export class MapScene extends Phaser.Scene {
     super('Map');
   }
 
-  init(data: { seed?: number }): void {
+  init(data: Partial<MissionConfig>): void {
     const urlSeed = Number(new URLSearchParams(window.location.search).get('seed'));
-    this.seed = data.seed ?? (urlSeed || randomSeed());
+    this.config = data.contract ? (data as MissionConfig) : quickConfig(urlSeed || randomSeed());
+    this.seed = this.config.contract.seed;
+    this.withdrew = false;
     this.state = 'active';
     this.endTimer = this.elapsed = this.kills = this.hits = this.damageDealt = 0;
     this.enemies = [];
@@ -97,15 +93,16 @@ export class MapScene extends Phaser.Scene {
   }
 
   create(): void {
-    const difficulty = COMBAT_DIFFICULTY[ACTIVE_COMBAT_DIFFICULTY];
-    this.map = generateDestroyTargets(this.seed, difficulty);
+    const cfg = this.config;
+    const difficulty = { enemyCount: cfg.enemyCount, enemySpread: cfg.enemySpread, enemyDamage: cfg.enemyDamage };
+    this.map = generateDestroyTargets(this.seed, difficulty, cfg.contract.targets);
     const m = this.map;
     this.world = new CollisionWorld(m.width, m.height, m.obstacles);
     const nav = new NavGrid(this.world, 34);
     this.drawMap();
 
     this.fx = new Effects(this);
-    this.player = new PlayerMech(this, STARTER_LOADOUT, this.movement, m.spawn.x, m.spawn.y, m.spawn.angle);
+    this.player = new PlayerMech(this, cfg.mech, this.movement, m.spawn.x, m.spawn.y, m.spawn.angle);
     for (const p of [...m.targets, ...m.turrets, ...m.tanks]) {
       this.enemies.push(createEnemy(this, p.type, p.x, p.y, p.angle, p.home));
     }
@@ -134,6 +131,8 @@ export class MapScene extends Phaser.Scene {
     hud.objectiveTotal = total;
     hud.objectiveDone = 0;
     hud.briefing = DESTROY_TARGETS.briefing(total);
+    hud.bonusLabel = cfg.contract.bonus.label;
+    hud.bonusState = 'open';
     hud.heatMax = this.player.chassis.heatCapacity;
     hud.ammoMax = this.player.chassis.ammoCapacity.ballistic;
     hud.lastHit = 0;
@@ -189,6 +188,32 @@ export class MapScene extends Phaser.Scene {
       debugInfo.mech =
         `${scheme} · speed ${p.motor.speed.toFixed(0)}/${this.movement.maxSpeed}` +
         ` · turn ${(p.motor.legTurnVel / DEG).toFixed(0)}°/s · heat ${p.heat.toFixed(0)}`;
+    }
+  }
+
+  /** Leave the battlefield: the mission fails but the mech comes home as it is. */
+  withdraw(): void {
+    if (this.state !== 'active') return;
+    this.withdrew = true;
+    this.state = 'lost';
+    this.endTimer = END_DELAY - 0.01;
+  }
+
+  /** Progress on the contract's bonus objective. */
+  private bonusState(): 'open' | 'done' | 'failed' {
+    const b = this.config.contract.bonus;
+    const p = this.player;
+    switch (b.kind) {
+      case 'turrets':
+        return this.enemies.some((e) => e instanceof Turret && e.alive) ? 'open' : 'done';
+      case 'tanks':
+        return this.enemies.some((e) => e instanceof Tank && e.alive) ? 'open' : 'done';
+      case 'fast':
+        if (this.elapsed > (b.seconds ?? 0)) return 'failed';
+        return this.state === 'won' ? 'done' : 'open';
+      case 'intact':
+        if (SECTIONS.some((sec) => p.sections.destroyed(sec))) return 'failed';
+        return this.state === 'won' ? 'done' : 'open';
     }
   }
 
@@ -336,9 +361,10 @@ export class MapScene extends Phaser.Scene {
     if (this.endTimer < END_DELAY && (this.endTimer += dt) >= END_DELAY) {
       hud.state = this.state;
       this.controls.reset();
-      const result: MissionResult = {
+      const outcome: MissionOutcome = {
         won: this.state === 'won',
-        seed: this.seed,
+        withdrew: this.withdrew,
+        bonusAchieved: this.state === 'won' && this.bonusState() === 'done',
         time: this.elapsed,
         kills: this.kills,
         targetsDestroyed: hud.objectiveDone,
@@ -348,8 +374,9 @@ export class MapScene extends Phaser.Scene {
         shots: p.stats.shots,
         hits: this.hits,
         ammoUsed: p.stats.ammoUsed,
+        mech: p.toState(),
       };
-      this.game.events.emit('mission-end', result);
+      this.game.events.emit('mission-end', outcome);
     }
   }
 
@@ -447,6 +474,11 @@ export class MapScene extends Phaser.Scene {
       else if (e.engaged && Math.hypot(e.x - p.x, e.y - p.y) < 1100) hud.threats.push(e);
     }
     if (this.elapsed > 4.5) hud.briefing = '';
+    hud.bonusState = this.bonusState();
+    if (this.config.contract.bonus.kind === 'fast' && hud.bonusState === 'open') {
+      const left = Math.max(0, (this.config.contract.bonus.seconds ?? 0) - this.elapsed);
+      hud.bonusLabel = `Finish within ${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
+    }
   }
 
   private drawMap(): void {

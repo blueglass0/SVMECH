@@ -8,6 +8,11 @@ export interface Unit extends Circle {
   alive: boolean;
   hp: number;
   maxHp: number;
-  /** `fromX/fromY` is where the shot came from (milestone 4 uses it for hit locations). */
-  takeDamage(amount: number, fromX: number, fromY: number): void;
+  /**
+   * `fromX/fromY`: where the shot came from. `hitX/hitY`: where it struck the unit's
+   * outline (mechs use it to pick the section hit).
+   */
+  takeDamage(amount: number, fromX: number, fromY: number, hitX?: number, hitY?: number): void;
+  /** Explosion near the unit (shell bursts). Mechs take this in the legs. */
+  takeSplash?(amount: number): void;
 }

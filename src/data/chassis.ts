@@ -46,6 +46,14 @@ export interface ChassisDef {
   tonnage: number;
   /** Collision radius, units. */
   radius: number;
+  /** Purchase price (also the basis for rebuild cost). */
+  price: number;
+  /** Most the mech can weigh with weapons and equipment, tons. */
+  maxTonnage: number;
+  /** Weight of the chassis itself (structure, armor, built-in reactor), tons. */
+  baseTonnage: number;
+  /** Power from the built-in reactor (swappable reactors arrive in milestone 6). */
+  powerOutput: number;
   movement: ChassisMovement;
   /** Armor per section. The mech is destroyed when the torso reaches 0. */
   sections: Record<Section, number>;
@@ -65,6 +73,10 @@ export const CHASSIS: Record<string, ChassisDef> = {
     weightClass: 'medium',
     tonnage: 50,
     radius: 30,
+    price: 400000,
+    maxTonnage: 50,
+    baseTonnage: 36,
+    powerOutput: 14,
     movement: {
       maxSpeed: 150,
       reverseFactor: 0.55,
@@ -76,7 +88,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
       strideLength: 46,
       stepShake: 0.0012,
     },
-    sections: { torso: 380, leftArm: 150, rightArm: 150, legs: 200 },
+    sections: { torso: 380, leftArm: 150, rightArm: 150, legs: 180 },
     heatCapacity: 100,
     heatDissipation: 8,
     ammoCapacity: { ballistic: 1350, missile: 0 },

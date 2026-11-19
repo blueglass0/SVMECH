@@ -19,6 +19,8 @@ interface Shot {
   damage: number;
   team: Team;
   big: boolean;
+  splashRadius: number;
+  splashDamage: number;
   img: Phaser.GameObjects.Image;
 }
 
@@ -55,7 +57,21 @@ export class Combat {
   ) {
     for (let i = 0; i < SHOT_POOL; i++) {
       const img = scene.add.image(0, 0, 'bullet').setVisible(false).setDepth(7).setScale(1 / ART_SCALE);
-      this.shots.push({ active: false, x: 0, y: 0, vx: 0, vy: 0, travelled: 0, range: 0, damage: 0, team: 'player', big: false, img });
+      this.shots.push({
+        active: false,
+        x: 0,
+        y: 0,
+        vx: 0,
+        vy: 0,
+        travelled: 0,
+        range: 0,
+        damage: 0,
+        team: 'player',
+        big: false,
+        splashRadius: 0,
+        splashDamage: 0,
+        img,
+      });
     }
     for (let i = 0; i < BEAM_POOL; i++) {
       const img = scene.add
@@ -68,8 +84,11 @@ export class Combat {
     }
   }
 
-  /** Fire one shot of a weapon from (x, y) toward `angle`. */
-  fire(x: number, y: number, angle: number, w: WeaponDef, team: Team, damageMult = 1, spreadMult = 1): void {
+  /**
+   * Fire one shot of a weapon from (x, y) toward `angle`. `aimDistance` is how far
+   * away the target is: shells with splash burst there if they don't hit anything first.
+   */
+  fire(x: number, y: number, angle: number, w: WeaponDef, team: Team, damageMult = 1, spreadMult = 1, aimDistance = 0): void {
     const a = angle + (Math.random() * 2 - 1) * w.spread * spreadMult * DEG;
     const damage = w.damage * damageMult;
     const volume = this.volumeAt(x, y) * (team === 'player' ? 1 : 0.7);
@@ -88,6 +107,10 @@ export class Combat {
     shot.vy = Math.sin(a) * w.projectileSpeed;
     shot.travelled = 0;
     shot.range = w.range;
+    shot.splashRadius = w.splash?.radius ?? 0;
+    shot.splashDamage = (w.splash?.damage ?? 0) * damageMult;
+    // Splash shells burst a little short of or past the aim point.
+    if (shot.splashRadius > 0 && aimDistance > 0) shot.range = Math.min(w.range, aimDistance * (0.92 + Math.random() * 0.16));
     shot.damage = damage;
     shot.team = team;
     shot.big = big;
@@ -117,7 +140,8 @@ export class Combat {
         const hy = s.y + (ny - s.y) * t;
         const angle = Math.atan2(s.vy, s.vx);
         this.fx.impact(hx, hy, angle, s.big ? 6 : 2);
-        if (hitUnit) this.damage(hitUnit, s.damage, s.x, s.y, s.team);
+        if (hitUnit) this.damage(hitUnit, s.damage, s.x, s.y, s.team, hx, hy);
+        else if (s.splashRadius > 0) this.burst(hx, hy, s, hitUnit);
         if (s.big) play('hit', this.volumeAt(hx, hy) * 0.8);
         this.kill(s);
         continue;
@@ -126,6 +150,7 @@ export class Combat {
       s.x = nx;
       s.y = ny;
       if (s.travelled >= s.range) {
+        if (s.splashRadius > 0) this.burst(nx, ny, s, null);
         this.kill(s);
         continue;
       }
@@ -164,7 +189,7 @@ export class Combat {
     const len = (t >= 0 ? t : 1) * range;
     const hx = x + Math.cos(a) * len;
     const hy = y + Math.sin(a) * len;
-    if (hitUnit) this.damage(hitUnit, damage, x, y, team);
+    if (hitUnit) this.damage(hitUnit, damage, x, y, team, hx, hy);
     if (t >= 0) this.fx.impact(hx, hy, a, 5);
     const b = this.beams[this.nextBeam];
     this.nextBeam = (this.nextBeam + 1) % this.beams.length;
@@ -178,9 +203,24 @@ export class Combat {
     this.fx.muzzle(x, y, a, 0.5);
   }
 
-  private damage(u: Unit, amount: number, fromX: number, fromY: number, team: Team): void {
-    u.takeDamage(amount, fromX, fromY);
+  private damage(u: Unit, amount: number, fromX: number, fromY: number, team: Team, hitX: number, hitY: number): void {
+    u.takeDamage(amount, fromX, fromY, hitX, hitY);
     this.onUnitHit?.(u, team, amount);
+  }
+
+  /** Shell burst on the ground: damage falls off with distance. Mechs take it in the legs. */
+  private burst(x: number, y: number, s: Shot, skip: Unit | null): void {
+    this.fx.explosion(x, y, 0.35);
+    play('hit', this.volumeAt(x, y));
+    for (const u of this.units) {
+      if (!u.alive || u.team === s.team || u === skip) continue;
+      const d = Math.hypot(u.x - x, u.y - y) - u.radius;
+      if (d >= s.splashRadius) continue;
+      const amount = s.splashDamage * (1 - Math.max(0, d) / s.splashRadius);
+      if (u.takeSplash) u.takeSplash(amount);
+      else u.takeDamage(amount, x, y);
+      this.onUnitHit?.(u, s.team, amount);
+    }
   }
 
   private kill(s: Shot): void {

@@ -30,6 +30,11 @@ export interface WeaponDef {
   price: number;
   /** Visual and sound style. */
   look: 'bullet' | 'shell' | 'laser';
+  /**
+   * Shells that burst on the ground where they were aimed (if they don't hit
+   * something first), damaging anything within `radius`: mech legs, mostly.
+   */
+  splash?: { radius: number; damage: number };
 }
 
 export const WEAPONS: Record<string, WeaponDef> = {
@@ -70,6 +75,24 @@ export const WEAPONS: Record<string, WeaponDef> = {
     price: 15000,
     look: 'shell',
   },
+  smallLaser: {
+    id: 'smallLaser',
+    name: 'Small laser',
+    short: 'S.LASER',
+    family: 'energy',
+    delivery: 'beam',
+    damage: 18,
+    fireRate: 1.2,
+    range: 420,
+    projectileSpeed: 0,
+    spread: 0,
+    heat: 7,
+    ammoPerShot: 0,
+    power: 4,
+    tonnage: 1,
+    price: 9000,
+    look: 'laser',
+  },
   laser: {
     id: 'laser',
     name: 'Medium laser',
@@ -100,13 +123,14 @@ export const WEAPONS: Record<string, WeaponDef> = {
     fireRate: 0.6,
     range: 470,
     projectileSpeed: 520,
-    spread: 3,
+    spread: 4.5,
     heat: 0,
     ammoPerShot: 0,
     power: 0,
     tonnage: 0,
     price: 0,
     look: 'shell',
+    splash: { radius: 60, damage: 9 },
   },
   turretGun: {
     id: 'turretGun',
@@ -118,7 +142,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     fireRate: 5,
     range: 420,
     projectileSpeed: 800,
-    spread: 6,
+    spread: 7,
     heat: 0,
     ammoPerShot: 0,
     power: 0,
@@ -136,12 +160,13 @@ export const WEAPONS: Record<string, WeaponDef> = {
     fireRate: 0.45,
     range: 560,
     projectileSpeed: 560,
-    spread: 2,
+    spread: 3.5,
     heat: 0,
     ammoPerShot: 0,
     power: 0,
     tonnage: 0,
     price: 0,
     look: 'shell',
+    splash: { radius: 70, damage: 13 },
   },
 };

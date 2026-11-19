@@ -59,6 +59,17 @@ export class SectionDamage {
     return r;
   }
 
+  /** Ground burst next to the mech: hits the legs (the torso takes half once the legs are gone). */
+  applySplash(amount: number): HitResult {
+    const r = this.result;
+    r.destroyed.length = 0;
+    r.section = 'legs';
+    const now = performance.now();
+    if (this.hp.legs > 0) this.damage('legs', amount, now);
+    else this.damage('torso', amount * 0.5, now);
+    return r;
+  }
+
   frac(s: Section): number {
     return this.hp[s] / this.max[s];
   }

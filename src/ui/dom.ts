@@ -4,16 +4,22 @@ import { settings, saveSettings } from '../core/settings';
 import { DEBUG } from '../core/debug';
 import { portraitPhone } from '../core/orientation';
 import { CHASSIS, STARTER_CHASSIS, type ChassisMovement } from '../data/chassis';
-import type { MapScene, MissionResult } from '../scenes/MapScene';
-import { play, setMuted } from '../core/audio';
+import type { MapScene } from '../scenes/MapScene';
+import { setMuted } from '../core/audio';
+import type { App } from './app';
 
 /**
  * Menus and buttons are plain HTML laid over the canvas: crisp at any
  * resolution, cheap, and touches on them never reach the game's sticks.
  */
-export function mountDomUi(game: Phaser.Game, container: HTMLElement): void {
+export function mountDomUi(game: Phaser.Game, container: HTMLElement, app: App): void {
   const bar = el('div', 'toolbar');
   container.appendChild(bar);
+
+  // Pause / withdraw (missions only).
+  const pauseBtn = button(bar, '❚❚', () => app.pauseMenu());
+  pauseBtn.title = 'Pause';
+  pauseBtn.classList.add('icon', 'mission-only');
 
   // Movement scheme for the device currently in use.
   const schemeBtn = button(bar, '', () => {
@@ -23,6 +29,7 @@ export function mountDomUi(game: Phaser.Game, container: HTMLElement): void {
     refresh();
   });
   schemeBtn.title = 'Switch between tank controls and direction-based movement';
+  schemeBtn.classList.add('mission-only');
   let shown = '';
   const refresh = () => {
     const label = `Controls: ${settings.scheme[actions.device] === 'tank' ? 'Tank' : 'Direction'}`;
@@ -55,10 +62,8 @@ export function mountDomUi(game: Phaser.Game, container: HTMLElement): void {
   muteBtn.title = 'Sound on/off';
   muteBtn.classList.add('icon');
 
-  mountEndScreen(game, container);
-
   if (DEBUG) {
-    const panel = tuningPanel(game);
+    const panel = tuningPanel(game, app);
     container.appendChild(panel);
     button(bar, 'Tune', () => panel.classList.toggle('open'));
   }
@@ -71,7 +76,7 @@ export function mountDomUi(game: Phaser.Game, container: HTMLElement): void {
     if (portraitPhone.matches) {
       map.releaseInput();
       map.scene.pause();
-    } else {
+    } else if (!document.querySelector('.screen.pause')) {
       map.scene.resume();
     }
   });
@@ -95,7 +100,7 @@ const TUNABLES: { key: keyof ChassisMovement; label: string; min: number; max: n
 ];
 
 /** Debug panel: live sliders for the mech's movement numbers, plus copy/reset. */
-function tuningPanel(game: Phaser.Game): HTMLElement {
+function tuningPanel(game: Phaser.Game, app: App): HTMLElement {
   const panel = el('div', 'tuning');
   const defaults = CHASSIS[STARTER_CHASSIS].movement;
   const movement = (): ChassisMovement | undefined =>
@@ -165,61 +170,9 @@ function tuningPanel(game: Phaser.Game): HTMLElement {
   button(dev, 'Hit R arm', () => map()?.devDamageSection('rightArm'));
   button(dev, 'Hit legs', () => map()?.devDamageSection('legs'));
   button(dev, 'Hit torso', () => map()?.devDamageSection('torso'));
-  button(dev, 'New map', () => restartMission(game));
+  button(dev, '+¢100k', () => app.devAddMoney(100000));
   panel.append(devTitle, dev);
   return panel;
-}
-
-/** Start a mission: a new random map, or the same map again with `seed`. */
-export function restartMission(game: Phaser.Game, seed?: number): void {
-  document.querySelector('.endscreen')?.classList.remove('open');
-  const map = game.scene.getScene('Map') as MapScene;
-  map.scene.restart({ seed });
-  game.scene.getScene('Hud')?.scene.restart();
-}
-
-function mountEndScreen(game: Phaser.Game, container: HTMLElement): void {
-  const screen = el('div', 'endscreen');
-  const card = el('div', 'end-card');
-  screen.appendChild(card);
-  container.appendChild(screen);
-
-  game.events.on('mission-end', (r: MissionResult) => {
-    const mins = Math.floor(r.time / 60);
-    const secs = Math.floor(r.time % 60).toString().padStart(2, '0');
-    const accuracy = r.shots > 0 ? Math.round((r.hits / r.shots) * 100) : 0;
-    card.className = 'end-card ' + (r.won ? 'won' : 'lost');
-    card.innerHTML = '';
-    const h = el('h1');
-    h.textContent = r.won ? 'Mission complete' : 'Mech destroyed';
-    const sub = el('p');
-    sub.textContent = r.won
-      ? 'All uplink towers destroyed. Payment arrives with the economy (milestone 5).'
-      : `Mission failed: ${r.targetsDestroyed} of ${r.targetsTotal} uplinks destroyed.`;
-    const stats = el('dl');
-    const rows: [string, string][] = [
-      ['Time', `${mins}:${secs}`],
-      ['Enemies destroyed', String(r.kills)],
-      ['Damage dealt', String(Math.round(r.damageDealt))],
-      ['Damage taken', String(Math.round(r.damageTaken))],
-      ['Accuracy', `${accuracy}%  (${r.hits}/${r.shots})`],
-      ['Ammo used', String(r.ammoUsed)],
-      ['Map seed', String(r.seed)],
-    ];
-    for (const [k, v] of rows) {
-      const dt = el('dt');
-      dt.textContent = k;
-      const dd = el('dd');
-      dd.textContent = v;
-      stats.append(dt, dd);
-    }
-    const actionsRow = el('div', 'end-actions');
-    button(actionsRow, 'New mission', () => restartMission(game)).classList.add('primary');
-    button(actionsRow, 'Retry this map', () => restartMission(game, r.seed));
-    card.append(h, sub, stats, actionsRow);
-    screen.classList.add('open');
-    play('ui', 1);
-  });
 }
 
 function fmt(v: number): string {

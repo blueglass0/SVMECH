@@ -4,8 +4,8 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 
 ## Current milestone
 
-**Milestone 4 — Locational damage: built, awaiting the user's playtest and sign-off.** M1–M3 signed off.
-Do not start milestone 5 (Economy loop) until the user signs off M4.
+**Milestone 5 — Economy loop: built, awaiting the user's playtest and sign-off.** M1–M4 signed off.
+This completes the prototype (M1–M5). Do not start milestone 6 until the user signs off M5.
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
 
 ## Decisions made after the plan
@@ -26,7 +26,8 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
 - Deploy: `.github/workflows/deploy.yml` builds and publishes to GitHub Pages on every push to `main`.
   Pages source must be set to "GitHub Actions" in the repo settings. If it is "Deploy from a branch",
   Pages serves the raw source and the game never loads.
-- Saves (from M5) go in `localStorage`.
+- Saves go in `localStorage` (`steel-vulture.career.v1`, see `src/career/career.ts`).
+- `?quick` skips the career and starts a throwaway mission (dev); `?debug` shows the dev tools.
 
 ## Layout
 
@@ -44,8 +45,15 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   - `world/` — `mapgen.ts` (seeded procedural maps), `NavGrid.ts` (A* for tanks).
   - `hudState.ts` — plain data the map scene publishes and the HUD reads.
 - `src/scenes/` — Phaser scenes. `Boot` (bakes art) → `Map` (world) + `Hud` (screen-space UI, laid out in CSS px).
-- `src/ui/` — HTML/DOM UI over the canvas (toolbar, tuning panel; later menus, shop, loadout).
-  Menus belong in the DOM, not in Phaser: crisp, cheap, and touches on them never reach the sticks.
+- `src/career/` — career rules and state (`career.ts`: money, upkeep, contracts, shop, loadout
+  limits, loans, career over, save/load; `types.ts`). Pure logic, no DOM or Phaser.
+- `src/ui/` — HTML/DOM UI over the canvas: `app.ts` (title, hangar tabs, deploy, debrief,
+  career over, pause/withdraw; owns the career and starts missions), `dom.ts` (toolbar, tuning
+  panel), `h.ts` (tiny DOM builder), `ui.css`. Menus belong in the DOM, not in Phaser: crisp,
+  cheap, and touches on them never reach the sticks.
+- Flow: `Boot` bakes art and emits `booted` → `App` shows title/hangar → deploy starts `Map` +
+  `Hud` with a `MissionConfig` → `Map` emits `mission-end` with a `MissionOutcome` → `App`
+  stops the scenes (deferred one tick) and shows the debrief.
 
 ## Working rules (from the plan)
 
@@ -95,18 +103,36 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   cursor), so the slow torso matters. Laser is hitscan; ballistics are projectiles.
 - Phone aim assist: stick aim bends halfway toward an enemy within 12° and 650 units.
 - Phone weapon groups: right stick fires `actions.stickGroup`; the ⇄ button next to it toggles 1/2.
+  Right stick aims only inside the inner ring (`CONTROLS.fireThreshold`) and fires past it.
 - Planned additions (see `docs/PLAN.md`): fog of war + sensors with M6, destructible terrain
   as M6b, continuous-beam lasers with M8.
 - Enemies alert neighbours within 650 units when shot. Tanks path with A* (repath ~1.5 s).
 - Locational damage (M4): `SectionDamage` (pure logic, reusable for enemy mechs in M8) with
-  rules in `src/data/damage.ts`. Shot origin relative to torso facing picks the section: front
-  ±50° torso, sides that arm, rear ±40° torso ×1.5. Legs take 15% of every hit. Damage beyond
+  rules in `src/data/damage.ts`. The point where a shot strikes the mech's outline, as an angle
+  from the torso facing, picks the section: front ±25° torso, sides (incl. off-centre frontal
+  hits) that arm, rear ±40° torso ×1.5. Legs take 15% of every hit plus splash: enemy cannon
+  shells burst on the ground at their aim point if they miss (`WeaponDef.splash`), and splash
+  hits mechs in the legs. Measured: ~28/25/32/15% torso/arms/legs standing still against
+  frontal fire; legs ~35% when walking (near misses). Damage beyond
   an arm's armor (or to a missing arm) goes to the torso; torso at 0 = mech destroyed.
   Destroyed arm: its weapons stop, arm sprite becomes a stump. Leg damage below 60% slows
   speed/turning, down to 35%/55% when destroyed. Sections under 40% smoke.
 - HUD: silhouette (per-section condition colours, flashes white when hit) and red hit-direction
   arcs around the mech for every hit (helps with shots from off-screen; fog of war will need it).
   Debug mode draws the hit arcs around the mech.
+
+## Economy notes (M5)
+
+- All numbers in `src/data/economy.ts` (× economy difficulty). Chassis price/tonnage/power in
+  `chassis.ts`, weapon price/tonnage/power in `weapons.ts`.
+- Fuel is per ton per deployment; ammo is paid for what you top up (leftover ammo stays loaded);
+  repairs per armor point (destroyed sections ×1.5); rebuild = 35% of chassis + weapons.
+- Damage carries between missions until repaired; you may deploy damaged.
+- Loan installments are due after every mission; shortfalls auto-sell spare gear, then end the
+  career (easy economy: bailout instead). Career also ends when the mech is destroyed or you
+  can't afford fuel, selling spares can't cover it, and you already have a loan.
+- Reloading mid-mission counts as a withdrawal (`activeContract` in the save).
+- Bonus objectives: destroy all turrets / all tanks / finish within a time / lose no section.
 
 ## Conventions
 
