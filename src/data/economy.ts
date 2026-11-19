@@ -1,0 +1,77 @@
+/**
+ * Every economy number: prices, payouts, upkeep, loans. Multiplied by the
+ * economy difficulty chosen when a career starts. Money is in credits (¢).
+ */
+export const ECONOMY = {
+  startingMoney: 80000,
+  /** Fuel per deployment, per ton of mech. */
+  fuelPerTon: 120,
+  /** Price per ammo unit loaded. */
+  ammoPrice: { ballistic: 8, missile: 40 },
+  /** Repair price per armor point. */
+  repairPerArmor: 55,
+  /** Repairing a destroyed section costs this much more (rebuilding it and its weapons). */
+  destroyedSectionMultiplier: 1.5,
+  /** Rebuilding a destroyed mech costs this fraction of its value (chassis + installed weapons). */
+  rebuildFraction: 0.35,
+  /** Gear sells for this fraction of its price. */
+  sellFraction: 0.6,
+  /** Contracts offered at once. */
+  contractsOnBoard: 4,
+  /** Bonus objective pays this fraction of the base payout. */
+  bonusFraction: 0.25,
+  tiers: {
+    1: { name: 'Low risk', payout: [55000, 75000], targets: 2, enemyCount: 0.7 },
+    2: { name: 'Standard', payout: [90000, 120000], targets: 3, enemyCount: 1 },
+    3: { name: 'High risk', payout: [140000, 180000], targets: 4, enemyCount: 1.35 },
+  } as Record<1 | 2 | 3, { name: string; payout: [number, number]; targets: number; enemyCount: number }>,
+  /** Chance of each tier appearing on the board. */
+  tierWeights: { 1: 0.4, 2: 0.4, 3: 0.2 } as Record<1 | 2 | 3, number>,
+  loan: {
+    /** Loan sizes offered. One loan at a time. */
+    amounts: [100000, 200000, 300000],
+    /** Total interest as a fraction of the principal. */
+    interest: 0.2,
+    /** Repaid in this many equal installments, one after each mission. */
+    installments: 5,
+  },
+};
+
+export interface EconomyDifficulty {
+  /** Multiplies every cost: fuel, ammo, repairs, rebuilds, shop prices. */
+  costs: number;
+  /** Multiplies contract payouts. */
+  payouts: number;
+  /** Multiplies loan interest. */
+  interest: number;
+  /** If false, going bankrupt gives an emergency bailout instead of ending the career. */
+  bankruptcyEndsCareer: boolean;
+}
+
+export const ECONOMY_DIFFICULTY: Record<'easy' | 'normal' | 'hard', EconomyDifficulty> = {
+  easy: { costs: 0.75, payouts: 1.2, interest: 0.5, bankruptcyEndsCareer: false },
+  normal: { costs: 1, payouts: 1, interest: 1, bankruptcyEndsCareer: true },
+  hard: { costs: 1.25, payouts: 0.85, interest: 1.5, bankruptcyEndsCareer: true },
+};
+
+/** Weapons the shop sells (factions and reputation change this from milestone 9). */
+export const SHOP_STOCK = ['machineGun', 'autocannon', 'smallLaser', 'laser'];
+
+/** Contract flavour: faction-neutral until milestone 9 adds the three factions. */
+export const EMPLOYERS = [
+  'Halden Mining Combine',
+  'Kestrel Freight Lines',
+  'Orrin Colonial Authority',
+  'Varga Salvage Co.',
+  'Tessaly Water Trust',
+  'Brannock Agricultural Cooperative',
+];
+
+export const ENEMY_FORCES = ['Dustline Militia', 'Red Ridge Separatists', 'Ashfall Raiders', 'Corvan Defence Garrison'];
+
+export const CONTRACT_FLAVOR = [
+  'The {enemy} have been coordinating raids through a string of uplink towers. {employer} wants them gone.',
+  '{employer} needs the {enemy} relay network silenced before their convoy moves through.',
+  'A {enemy} uplink grid is jamming {employer} traffic across the sector. Cut it.',
+  'The {enemy} are using uplink towers to spot for artillery. {employer} pays for every one destroyed.',
+];

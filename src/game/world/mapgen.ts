@@ -31,7 +31,7 @@ type Box = [number, number, number, number];
  * `minGap` from every other obstacle and from the map edge, so all open
  * ground is connected and reachable by the mech and by tanks.
  */
-export function generateDestroyTargets(seed: number, difficulty: CombatDifficulty): MissionMap {
+export function generateDestroyTargets(seed: number, difficulty: CombatDifficulty, targetCount: number = DESTROY_TARGETS.targets): MissionMap {
   const T = DESTROY_TARGETS;
   const M = T.map;
   const rng = new Rng(seed);
@@ -43,7 +43,7 @@ export function generateDestroyTargets(seed: number, difficulty: CombatDifficult
 
   // Target sites: far from the drop point and from each other.
   const sites: Vec[] = [];
-  for (let attempt = 0; sites.length < T.targets && attempt < 2000; attempt++) {
+  for (let attempt = 0; sites.length < targetCount && attempt < 3000; attempt++) {
     const minApart = attempt < 1000 ? 850 : 600;
     const p = { x: rng.range(350, W - 350), y: rng.range(350, H * 0.7) };
     if (dist(p, spawn) < T.targetMinDistance) continue;

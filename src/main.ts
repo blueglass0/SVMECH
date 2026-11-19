@@ -5,6 +5,8 @@ import { BootScene } from './scenes/BootScene';
 import { MapScene } from './scenes/MapScene';
 import { HudScene } from './scenes/HudScene';
 import { mountDomUi } from './ui/dom';
+import { App } from './ui/app';
+import './ui/ui.css';
 import { installAudioUnlock } from './core/audio';
 
 const container = document.getElementById('game')!;
@@ -34,7 +36,10 @@ const game = new Phaser.Game({
 });
 
 trackViewport(game, container);
-mountDomUi(game, container);
+const app = new App(game, container);
+mountDomUi(game, container, app);
+// Boot bakes the art, then hands over to the title screen / hangar.
+game.events.once('booted', () => app.start());
 installAudioUnlock();
 
 if (import.meta.env.DEV) {

@@ -4,8 +4,8 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 
 ## Current milestone
 
-**Milestone 4 — Locational damage: built, awaiting the user's playtest and sign-off.** M1–M3 signed off.
-Do not start milestone 5 (Economy loop) until the user signs off M4.
+**Milestone 5 — Economy loop: built, awaiting the user's playtest and sign-off.** M1–M4 signed off.
+This completes the prototype (M1–M5). Do not start milestone 6 until the user signs off M5.
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
 
 ## Decisions made after the plan
@@ -26,7 +26,8 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
 - Deploy: `.github/workflows/deploy.yml` builds and publishes to GitHub Pages on every push to `main`.
   Pages source must be set to "GitHub Actions" in the repo settings. If it is "Deploy from a branch",
   Pages serves the raw source and the game never loads.
-- Saves (from M5) go in `localStorage`.
+- Saves go in `localStorage` (`steel-vulture.career.v1`, see `src/career/career.ts`).
+- `?quick` skips the career and starts a throwaway mission (dev); `?debug` shows the dev tools.
 
 ## Layout
 
@@ -44,8 +45,15 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   - `world/` — `mapgen.ts` (seeded procedural maps), `NavGrid.ts` (A* for tanks).
   - `hudState.ts` — plain data the map scene publishes and the HUD reads.
 - `src/scenes/` — Phaser scenes. `Boot` (bakes art) → `Map` (world) + `Hud` (screen-space UI, laid out in CSS px).
-- `src/ui/` — HTML/DOM UI over the canvas (toolbar, tuning panel; later menus, shop, loadout).
-  Menus belong in the DOM, not in Phaser: crisp, cheap, and touches on them never reach the sticks.
+- `src/career/` — career rules and state (`career.ts`: money, upkeep, contracts, shop, loadout
+  limits, loans, career over, save/load; `types.ts`). Pure logic, no DOM or Phaser.
+- `src/ui/` — HTML/DOM UI over the canvas: `app.ts` (title, hangar tabs, deploy, debrief,
+  career over, pause/withdraw; owns the career and starts missions), `dom.ts` (toolbar, tuning
+  panel), `h.ts` (tiny DOM builder), `ui.css`. Menus belong in the DOM, not in Phaser: crisp,
+  cheap, and touches on them never reach the sticks.
+- Flow: `Boot` bakes art and emits `booted` → `App` shows title/hangar → deploy starts `Map` +
+  `Hud` with a `MissionConfig` → `Map` emits `mission-end` with a `MissionOutcome` → `App`
+  stops the scenes (deferred one tick) and shows the debrief.
 
 ## Working rules (from the plan)
 
@@ -112,6 +120,19 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
 - HUD: silhouette (per-section condition colours, flashes white when hit) and red hit-direction
   arcs around the mech for every hit (helps with shots from off-screen; fog of war will need it).
   Debug mode draws the hit arcs around the mech.
+
+## Economy notes (M5)
+
+- All numbers in `src/data/economy.ts` (× economy difficulty). Chassis price/tonnage/power in
+  `chassis.ts`, weapon price/tonnage/power in `weapons.ts`.
+- Fuel is per ton per deployment; ammo is paid for what you top up (leftover ammo stays loaded);
+  repairs per armor point (destroyed sections ×1.5); rebuild = 35% of chassis + weapons.
+- Damage carries between missions until repaired; you may deploy damaged.
+- Loan installments are due after every mission; shortfalls auto-sell spare gear, then end the
+  career (easy economy: bailout instead). Career also ends when the mech is destroyed or you
+  can't afford fuel, selling spares can't cover it, and you already have a loan.
+- Reloading mid-mission counts as a withdrawal (`activeContract` in the save).
+- Bonus objectives: destroy all turrets / all tanks / finish within a time / lose no section.
 
 ## Conventions
 

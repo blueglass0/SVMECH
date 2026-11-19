@@ -40,6 +40,7 @@ export class HudScene extends Phaser.Scene {
   private hint!: Txt;
   private hintKey = '';
   private objective!: Txt;
+  private bonus!: Txt;
   private briefing!: Txt;
   private warning!: Txt;
   private groupTexts: Txt[] = [];
@@ -84,6 +85,7 @@ export class HudScene extends Phaser.Scene {
     this.flash = this.add.image(0, 0, 'px-hot').setOrigin(0, 0).setAlpha(0);
 
     this.objective = this.addText(MARGIN, MARGIN, '', { fontFamily: FONT, fontSize: '14px', fontStyle: 'bold', color: '#e8a33d' });
+    this.bonus = this.addText(MARGIN, MARGIN + 20, '', { fontFamily: FONT, fontSize: '12px', color: '#8b98a3' });
     this.briefing = this.addText(0, 0, '', {
       fontFamily: FONT,
       fontSize: '17px',
@@ -225,6 +227,10 @@ export class HudScene extends Phaser.Scene {
     if (this.textTimer <= 0) {
       this.textTimer = 100;
       this.setTextIfChanged(this.objective, 'obj', `${hud.objectiveLabel.toUpperCase()}  ${hud.objectiveDone} / ${hud.objectiveTotal}`);
+      const mark = hud.bonusState === 'done' ? '  ✓' : hud.bonusState === 'failed' ? '  ✗' : '';
+      if (this.setTextIfChanged(this.bonus, 'bonus', hud.bonusLabel ? `Bonus: ${hud.bonusLabel}${mark}` : '')) {
+        this.bonus.setColor(hud.bonusState === 'done' ? '#8fd16a' : hud.bonusState === 'failed' ? '#ff6a5a' : '#8b98a3');
+      }
       this.setTextIfChanged(this.briefing, 'brief', hud.briefing);
       this.briefing.setVisible(hud.briefing !== '');
       hud.groups.forEach((g, i) =>
@@ -282,10 +288,11 @@ export class HudScene extends Phaser.Scene {
     }
   }
 
-  private setTextIfChanged(t: Txt, key: string, value: string): void {
-    if (this.shown[key] === value) return;
+  private setTextIfChanged(t: Txt, key: string, value: string): boolean {
+    if (this.shown[key] === value) return false;
     this.shown[key] = value;
     t.setText(value);
+    return true;
   }
 
   private bar(texture: string): Img {

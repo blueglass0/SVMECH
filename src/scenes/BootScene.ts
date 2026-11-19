@@ -14,7 +14,7 @@ export class BootScene extends Phaser.Scene {
     bakeArt(this);
     bakeCombatArt(this);
     bakeDamageArt(this);
-    this.scene.start('Map');
-    this.scene.launch('Hud');
+    // Missions are started by the hangar (src/ui/app.ts).
+    this.game.events.emit('booted');
   }
 }
