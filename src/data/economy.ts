@@ -28,6 +28,8 @@ export const ECONOMY = {
   tonnageLimitChance: 0.35,
   tonnageLimits: [40, 55, 75],
   tonnageLimitPayBonus: 0.15,
+  /** Each enemy mech on a contract adds this share to the payout (milestone 8). */
+  enemyMechPayBonus: 0.12,
   /** Field stations (ammo depot, repair bay, swap station) on some maps. */
   field: {
     /** Field services cost this many times the hangar price. */

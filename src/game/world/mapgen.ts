@@ -14,6 +14,13 @@ export interface Placement {
   home?: Vec;
 }
 
+/** Drone flights and enemy mechs on the map (rolled with the contract, milestone 8). */
+export interface MissionForces {
+  /** Enemy mech types (EnemyDef ids), one entry per mech. */
+  mechs: readonly string[];
+  droneFlights: number;
+}
+
 export interface MissionMap {
   seed: number;
   width: number;
@@ -23,6 +30,8 @@ export interface MissionMap {
   targets: Placement[];
   turrets: Placement[];
   tanks: Placement[];
+  /** Drones and enemy mechs (placed like tanks, created by `createEnemy`). */
+  units: Placement[];
   /** Field stations: ammo depot, repair bay, swap station. */
   stations: { type: StationType; x: number; y: number }[];
 }
@@ -38,7 +47,12 @@ type Box = [number, number, number, number];
  * `minGap` from every other obstacle and from the map edge, so all open
  * ground is connected and reachable by the mech and by tanks.
  */
-export function generateDestroyTargets(seed: number, difficulty: CombatDifficulty, targetCount: number = DESTROY_TARGETS.targets): MissionMap {
+export function generateDestroyTargets(
+  seed: number,
+  difficulty: CombatDifficulty,
+  targetCount: number = DESTROY_TARGETS.targets,
+  forces: MissionForces = { mechs: [], droneFlights: 0 },
+): MissionMap {
   const T = DESTROY_TARGETS;
   const M = T.map;
   const rng = new Rng(seed);
@@ -222,16 +236,19 @@ export function generateDestroyTargets(seed: number, difficulty: CombatDifficult
     p.x < W - r - 20 &&
     p.y < H - r - 20 &&
     obstacles.every((o) => boxCircleDistance(box(o), p) > r + 20) &&
-    [...turrets, ...targets, ...tanks].every((u) => dist(u, p) > 120) &&
+    [...turrets, ...targets, ...tanks, ...units].every((u) => dist(u, p) > 120) &&
     stations.every((s) => dist(s, p) > 300);
-  const placeTank = (near: Vec, spread: number, home: Vec) => {
+  const units: Placement[] = [];
+  const placeUnit = (list: Placement[], type: () => string, near: Vec, spread: number, home: Vec, r = 40, minFromSpawn = 900) => {
     for (let attempt = 0; attempt < 60; attempt++) {
       const p = { x: near.x + rng.range(-spread, spread), y: near.y + rng.range(-spread, spread) };
-      if (dist(p, spawn) < 900 || !free(p, 40)) continue;
-      tanks.push({ type: pickWeighted(rng, T.tankTypes), x: p.x, y: p.y, angle: rng.range(-Math.PI, Math.PI), home });
-      return;
+      if (dist(p, spawn) < minFromSpawn || !free(p, r)) continue;
+      list.push({ type: type(), x: p.x, y: p.y, angle: rng.range(-Math.PI, Math.PI), home });
+      return true;
     }
+    return false;
   };
+  const placeTank = (near: Vec, spread: number, home: Vec) => placeUnit(tanks, () => pickWeighted(rng, T.tankTypes), near, spread, home);
   const guards = Math.round(T.tanksPerTarget * difficulty.enemyCount);
   for (const s of sites) for (let i = 0; i < guards; i++) placeTank(s, 380, s);
   const roamers = Math.round(rng.int(T.roamingTanks[0], T.roamingTanks[1]) * difficulty.enemyCount);
@@ -240,7 +257,19 @@ export function generateDestroyTargets(seed: number, difficulty: CombatDifficult
     placeTank(p, 200, p);
   }
 
-  return { seed, width: W, height: H, obstacles, spawn, targets, turrets, tanks, stations };
+  // Enemy mechs guard a base each (they patrol around it); drone flights roam between.
+  for (let i = 0; i < forces.mechs.length; i++) {
+    const s = sites[i % sites.length];
+    const type = forces.mechs[i];
+    placeUnit(units, () => type, s, 450, s, 55, 1100);
+  }
+  for (let f = 0; f < forces.droneFlights; f++) {
+    const flightSize = rng.int(T.droneFlightSize[0], T.droneFlightSize[1]);
+    const c = { x: rng.range(400, W - 400), y: rng.range(300, H - 1000) };
+    for (let i = 0; i < flightSize; i++) placeUnit(units, () => T.droneType, c, 160, c, 20, 1000);
+  }
+
+  return { seed, width: W, height: H, obstacles, spawn, targets, turrets, tanks, units, stations };
 }
 
 function pickWeighted(rng: Rng, items: readonly { type: string; weight: number }[]): string {

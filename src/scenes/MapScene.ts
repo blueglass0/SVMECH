@@ -13,6 +13,7 @@ import { play } from '../core/audio';
 import { DEBUG, debugInfo } from '../core/debug';
 import type { Section } from '../data/chassis';
 import { DAMAGE_RULES } from '../data/damage';
+import { ENEMIES } from '../data/enemies';
 import { SECTIONS } from '../game/units/SectionDamage';
 import { portraitPhone } from '../core/orientation';
 import { ART_SCALE, bakeGroundTile } from '../game/art';
@@ -20,7 +21,7 @@ import { Combat } from '../game/combat/Combat';
 import { Effects } from '../game/combat/Effects';
 import type { Unit } from '../game/combat/types';
 import { hud } from '../game/hudState';
-import { PlayerMech } from '../game/units/PlayerMech';
+import { Mech } from '../game/units/Mech';
 import { Enemy, Structure, Tank, Turret, createEnemy, type AiContext } from '../game/units/Enemies';
 import { NavGrid } from '../game/world/NavGrid';
 import { FogOverlay } from '../game/world/Fog';
@@ -69,7 +70,7 @@ export class MapScene extends Phaser.Scene {
   private controls!: InputSystem;
   private fx!: Effects;
   private combat!: Combat;
-  player!: PlayerMech;
+  player!: Mech;
   private enemies: Enemy[] = [];
   private structures: Structure[] = [];
   private dead = new Set<Enemy>();
@@ -97,7 +98,7 @@ export class MapScene extends Phaser.Scene {
   private warnTimer = 0;
   private evac: Vec | null = null;
   /** Every mech fielded this mission (first = the one deployed), and backups still waiting. */
-  private deployed: PlayerMech[] = [];
+  private deployed: Mech[] = [];
   private backupQueue: MechState[] = [];
   /** Seconds until the next backup lands (0 = none dropping). */
   private dropTimer = 0;
@@ -139,7 +140,8 @@ export class MapScene extends Phaser.Scene {
   create(): void {
     const cfg = this.config;
     const difficulty = { enemyCount: cfg.enemyCount, enemySpread: cfg.enemySpread, enemyDamage: cfg.enemyDamage };
-    this.map = generateDestroyTargets(this.seed, difficulty, cfg.contract.targets);
+    const forces = { mechs: cfg.contract.enemyMechs ?? [], droneFlights: cfg.contract.droneFlights ?? 0 };
+    this.map = generateDestroyTargets(this.seed, difficulty, cfg.contract.targets, forces);
     const m = this.map;
     this.world = new CollisionWorld(m.width, m.height, m.obstacles);
     // Tanks crush props, so props don't block their paths.
@@ -148,7 +150,7 @@ export class MapScene extends Phaser.Scene {
     this.drawMap();
 
     this.fx = new Effects(this);
-    this.player = new PlayerMech(this, cfg.mech, this.movement, m.spawn.x, m.spawn.y, m.spawn.angle);
+    this.player = new Mech(this, cfg.mech, this.movement, m.spawn.x, m.spawn.y, m.spawn.angle);
     this.deployed = [this.player];
     this.backupQueue = [...cfg.backups];
     this.dropTimer = 0;
@@ -161,7 +163,7 @@ export class MapScene extends Phaser.Scene {
       used: false,
       img: this.add.image(st.x, st.y, `station-${st.type}`).setScale(1 / ART_SCALE).setDepth(1.5),
     }));
-    for (const p of [...m.targets, ...m.turrets, ...m.tanks]) {
+    for (const p of [...m.targets, ...m.turrets, ...m.tanks, ...m.units]) {
       this.enemies.push(createEnemy(this, p.type, p.x, p.y, p.angle, p.home));
     }
     this.structures = this.enemies.filter((e): e is Structure => e instanceof Structure);
@@ -402,18 +404,30 @@ export class MapScene extends Phaser.Scene {
     for (const s of this.structures) s.takeDamage(1e6, s.x, s.y);
   }
 
-  devSpawnTank(type: string = DESTROY_TARGETS.tankType): void {
+  /** Dev: spawn an enemy ahead of the player (tanks, drones, enemy mechs: any EnemyDef id). */
+  devSpawnTank(type: string = DESTROY_TARGETS.tankType, distance = 420): Enemy {
     const p = this.player;
     const a = p.motor.torsoAngle;
-    const e = createEnemy(this, type, p.x + Math.cos(a) * 420, p.y + Math.sin(a) * 420, a + Math.PI);
-    if (this.world.circleBlocked(e.x, e.y, e.radius)) {
-      e.x = p.x + Math.cos(a) * 200;
-      e.y = p.y + Math.sin(a) * 200;
-    }
+    const e = createEnemy(this, type, p.x + Math.cos(a) * distance, p.y + Math.sin(a) * distance, a + Math.PI);
+    if (!e.flying && this.world.circleBlocked(e.x, e.y, e.radius)) e.place(p.x + Math.cos(a) * 200, p.y + Math.sin(a) * 200);
     this.enemies.push(e);
     this.units.push(e);
     this.rebuildBodies();
+    return e;
   }
+
+  devSpawnDrones(): void {
+    for (let i = 0; i < 3; i++) this.devSpawnTank('drone', 500 + i * 40);
+  }
+
+  /** Dev: spawn the next enemy mech type in turn. */
+  devSpawnMech(): string {
+    const types = Object.values(ENEMIES).filter((d) => d.kind === 'mech');
+    const def = types[this.devMechIndex++ % types.length];
+    this.devSpawnTank(def.id, 520);
+    return def.name;
+  }
+  private devMechIndex = 0;
 
   devToggleInvulnerable(): boolean {
     this.player.invulnerable = !this.player.invulnerable;
@@ -510,7 +524,7 @@ export class MapScene extends Phaser.Scene {
   private rebuildBodies(): void {
     this.bodies.length = 0;
     if (this.player?.alive) this.bodies.push(this.player);
-    for (const e of this.enemies) if (e.alive) this.bodies.push(e);
+    for (const e of this.enemies) if (e.alive && !e.flying) this.bodies.push(e);
   }
 
   private updateMission(dt: number): void {
@@ -555,7 +569,7 @@ export class MapScene extends Phaser.Scene {
     if (this.endTimer < END_DELAY && (this.endTimer += dt) >= END_DELAY) {
       hud.state = this.state;
       this.controls.reset();
-      const sum = (f: (m: PlayerMech) => number) => this.deployed.reduce((t, m) => t + f(m), 0);
+      const sum = (f: (m: Mech) => number) => this.deployed.reduce((t, m) => t + f(m), 0);
       const outcome: MissionOutcome = {
         won: this.state === 'won',
         withdrew: this.withdrew,
@@ -659,7 +673,7 @@ export class MapScene extends Phaser.Scene {
     if (!state) return;
     const old = this.player;
     old.airlift();
-    this.player = new PlayerMech(this, state, this.movement, st.x, st.y, old.motor.torsoAngle);
+    this.player = new Mech(this, state, this.movement, st.x, st.y, old.motor.torsoAngle);
     this.deployed.push(this.player);
     this.units[this.units.indexOf(old)] = this.player;
     this.rebuildBodies();
@@ -712,7 +726,7 @@ export class MapScene extends Phaser.Scene {
       }
     }
     this.dropTimer = 0;
-    this.player = new PlayerMech(this, state, this.movement, best.x, best.y, old.motor.torsoAngle);
+    this.player = new Mech(this, state, this.movement, best.x, best.y, old.motor.torsoAngle);
     this.deployed.push(this.player);
     this.units[this.units.indexOf(old)] = this.player;
     this.rebuildBodies();

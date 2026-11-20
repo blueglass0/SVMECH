@@ -481,6 +481,9 @@ body.in-mission .toolbar .mission-only {
 .limit {
   color: #ffc561;
 }
+.threat {
+  color: #ff9a8a;
+}
 .lance {
   display: flex;
   flex-direction: column;

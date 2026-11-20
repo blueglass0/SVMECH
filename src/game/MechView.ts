@@ -24,23 +24,42 @@ export class MechView {
   private legTick: Phaser.GameObjects.Image;
   /** 0..1, how much the feet swing. Eases in and out so stopping looks planted. */
   private gait = 0;
+  /** Torso and leg markers shown (the player's mech only). */
+  private markers: boolean;
+  private armIntact = { leftArm: true, rightArm: true };
 
   constructor(
     scene: Phaser.Scene,
     private motor: MechMotor,
-    showAimMarker: boolean,
+    showMarkers: boolean,
     /** Size relative to the medium mech the art is drawn for. */
     private size = 1,
+    /** Texture set: '' (player), '-enemy', or '-wreck'. */
+    private skin = '',
   ) {
     const s = size / ART_SCALE;
-    this.legTick = scene.add.image(0, 0, 'leg-tick').setScale(1 / ART_SCALE).setDepth(3);
-    this.footL = scene.add.image(0, 0, 'mech-foot').setScale(s).setDepth(4);
-    this.footR = scene.add.image(0, 0, 'mech-foot').setScale(s).setDepth(4);
-    this.hips = scene.add.image(0, 0, 'mech-hips').setScale(s).setDepth(4);
-    this.torso = scene.add.image(0, 0, 'mech-torso').setScale(s * TORSO_SCALE).setDepth(6);
-    this.armL = scene.add.image(0, 0, 'mech-arm').setScale(s * TORSO_SCALE).setDepth(6);
-    this.armR = scene.add.image(0, 0, 'mech-arm').setScale(s * TORSO_SCALE).setDepth(6);
-    this.chevron = scene.add.image(0, 0, 'aim-chevron').setScale(1 / ART_SCALE).setVisible(showAimMarker).setDepth(10);
+    this.markers = showMarkers;
+    this.legTick = scene.add.image(0, 0, 'leg-tick').setScale(1 / ART_SCALE).setDepth(3).setVisible(showMarkers);
+    this.footL = scene.add.image(0, 0, 'mech-foot' + skin).setScale(s).setDepth(4);
+    this.footR = scene.add.image(0, 0, 'mech-foot' + skin).setScale(s).setDepth(4);
+    this.hips = scene.add.image(0, 0, 'mech-hips' + skin).setScale(s).setDepth(4);
+    this.torso = scene.add.image(0, 0, 'mech-torso' + skin).setScale(s * TORSO_SCALE).setDepth(6);
+    this.armL = scene.add.image(0, 0, 'mech-arm' + skin).setScale(s * TORSO_SCALE).setDepth(6);
+    this.armR = scene.add.image(0, 0, 'mech-arm' + skin).setScale(s * TORSO_SCALE).setDepth(6);
+    this.chevron = scene.add.image(0, 0, 'aim-chevron').setScale(1 / ART_SCALE).setVisible(showMarkers).setDepth(10);
+  }
+
+  /** Swap the texture set (enemy mechs become wrecks), and drop under live units. */
+  setSkin(skin: string, depthOffset = 0): void {
+    this.skin = skin;
+    this.footL.setTexture('mech-foot' + skin).setDepth(4 + depthOffset);
+    this.footR.setTexture('mech-foot' + skin).setDepth(4 + depthOffset);
+    this.hips.setTexture('mech-hips' + skin).setDepth(4 + depthOffset);
+    this.torso.setTexture('mech-torso' + skin).setDepth(6 + depthOffset);
+    this.setArm('leftArm', this.armIntact.leftArm);
+    this.setArm('rightArm', this.armIntact.rightArm);
+    this.armL.setDepth(6 + depthOffset);
+    this.armR.setDepth(6 + depthOffset);
   }
 
   /** Dim the mech (shutdown, destroyed). */
@@ -49,13 +68,15 @@ export class MechView {
   }
 
   setVisible(v: boolean): void {
-    for (const img of [this.footL, this.footR, this.hips, this.torso, this.armL, this.armR, this.chevron, this.legTick]) img.setVisible(v);
-    this.debugArcs?.setVisible(v);
+    for (const img of [this.footL, this.footR, this.hips, this.torso, this.armL, this.armR]) img.setVisible(v);
+    for (const img of [this.chevron, this.legTick]) img.setVisible(v && this.markers);
+    this.debugArcs?.setVisible(v && this.markers);
   }
 
   /** Swap an arm for a stump (destroyed) or restore it. */
   setArm(side: 'leftArm' | 'rightArm', intact: boolean): void {
-    (side === 'leftArm' ? this.armL : this.armR).setTexture(intact ? 'mech-arm' : 'mech-arm-stub');
+    this.armIntact[side] = intact;
+    (side === 'leftArm' ? this.armL : this.armR).setTexture(intact ? 'mech-arm' + this.skin : 'mech-arm-stub');
   }
 
   /** Debug: show the hit arcs around the mech. */
@@ -72,6 +93,7 @@ export class MechView {
   }
 
   setMarkersVisible(v: boolean): void {
+    this.markers = v;
     this.chevron.setVisible(v);
     this.legTick.setVisible(v);
     this.debugArcs?.setVisible(v);
@@ -101,6 +123,7 @@ export class MechView {
     this.armL.setPosition(x - ax, y - ay).setRotation(m.torsoAngle);
     this.armR.setPosition(x + ax, y + ay).setRotation(m.torsoAngle);
     this.debugArcs?.setPosition(x, y).setRotation(m.torsoAngle);
+    if (!this.markers) return;
 
     const d = CAMERA.aimMarkerDistance;
     this.chevron

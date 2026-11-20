@@ -35,6 +35,18 @@ export const DESTROY_TARGETS = {
     { type: 'lightTank', weight: 3 },
     { type: 'missileTank', weight: 1 },
   ],
+  /**
+   * Drone flights and enemy mechs (milestone 8), per contract tier. Rolled when the
+   * contract is made so the board can show them. Counts are [min, max].
+   */
+  forces: {
+    1: { droneFlights: [0, 1], mechs: [0, 1], mechTypes: [{ type: 'raider', weight: 3 }, { type: 'trooper', weight: 1 }] },
+    2: { droneFlights: [1, 2], mechs: [1, 1], mechTypes: [{ type: 'raider', weight: 2 }, { type: 'trooper', weight: 3 }, { type: 'brawler', weight: 1 }] },
+    3: { droneFlights: [1, 2], mechs: [1, 2], mechTypes: [{ type: 'trooper', weight: 2 }, { type: 'brawler', weight: 3 }, { type: 'juggernaut', weight: 1 }] },
+  } as Record<1 | 2 | 3, { droneFlights: [number, number]; mechs: [number, number]; mechTypes: { type: string; weight: number }[] }>,
+  /** Drones per flight (not scaled by difficulty: flights already scale with the tier). */
+  droneFlightSize: [2, 3],
+  droneType: 'drone',
   /** Keep this clear around the player's drop point. */
   spawnClearance: 380,
   /** Targets are at least this far from the drop point. */

@@ -4,9 +4,10 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 
 ## Current milestone
 
-**Milestone 8 part 1 — The rest of the weapons: built, awaiting the user's playtest.** M1–M7
-signed off. Next: M8 part 2 (drones and enemy mechs that use the player's systems), then 9
-(factions).
+**Milestone 8 (both parts) — weapons, drones and enemy mechs: built, awaiting the user's
+playtest** (the user is testing parts 1 and 2 together). M1–M7 signed off. Next by plan: 9
+(factions). Open: the user wants ideas on weapon convergence (wide mounts miss small targets
+dead ahead) before anything changes; see the M8 part 2 notes.
 Deferred by the user: line-of-sight shadow rendering (logic already hides enemies behind
 walls); revisit as a graphics option, likely in M11.
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
@@ -51,7 +52,9 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   synthesized audio (`audio.ts`, Web Audio, no files), settings (localStorage), math, debug flag.
 - `src/game/` — gameplay. Logic and rendering are split where it matters: `MechMotor` (pure
   movement logic, no Phaser) and `MechView` (sprites). `art.ts` bakes all vector art at boot.
-  - `units/` — `PlayerMech` (weapons, heat, ammo, armor) and `Enemies` (tank, turret, structure + AI).
+  - `units/` — `Mech` (movement, weapons, heat, ammo, armor, equipment; the player's mech and,
+    driven by an AI, enemy mechs), `Enemy` (base class, `Gunner`, `PathFollower`), `Enemies`
+    (tank, turret, structure, `createEnemy`), `Drone`, `EnemyMech`.
   - `combat/` — `Combat` (pooled projectiles and beams, hit tests), `Effects` (pooled sparks,
     explosions, smoke, scorch), `types.ts` (`Unit`: anything shots can hit).
   - `world/` — `mapgen.ts` (seeded procedural maps), `NavGrid.ts` (A* for tanks).
@@ -92,7 +95,7 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
 - `Phaser.AUTO`: WebGL with Canvas 2D fallback. Keep everything working in Canvas mode
   (avoid WebGL-only filters/shaders for anything gameplay-critical).
 - Pool bullets, effects and enemies; never create/destroy per shot. Cap particles. Pools are
-  fixed-size (shots 240, beams 8, sparks 64...); effect pools are round-robin (oldest reused).
+  fixed-size (shots 240, beams 24, streams 12, sparks 64...); effect pools are round-robin (oldest reused).
 - No tint: Canvas mode doesn't support it. Colour variants are separate baked textures
   (e.g. `px-*` swatches for bars, `*-wreck` textures for destroyed units).
 - Obstacles are drawn once into per-chunk Graphics (800×800 world units); off-screen chunks are
@@ -152,7 +155,7 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   armor plating, ammo bins, shield generator, flares, point defense. Shop items are weapons or
   equipment, ids unique across both (`src/data/items.ts`).
 - `src/game/mechStats.ts` derives everything from a loadout (tonnage, slots, power, heat,
-  section max armor, ammo capacity, equipment). Career, UI and `PlayerMech` all use it.
+  section max armor, ammo capacity, equipment). Career, UI and `Mech` all use it.
 - Save migration: careers saved before M6 get the starter reactor + heat sink on load.
 - Equipment actions: Q / E on PC (`actions.equip1/2`), small buttons above the right stick on
   phones (only shown when fitted). Order: flares first, then shield (`EQUIPMENT_ACTION_ORDER`).
@@ -236,7 +239,7 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   from the money you had at deploy (`MissionConfig.funds`, `fieldPrices`); spending comes back in
   `MissionOutcome.fieldCosts` and shows as debrief lines. Ammo: full refill. Repair: restores
   every section that isn't destroyed. Swap (fee 16k): the current mech is airlifted home as it is
-  (`PlayerMech.airlift`) and the backup lands on the pad.
+  (`Mech.airlift`) and the backup lands on the pad.
 
 ## Weapon notes (M8 part 1)
 
@@ -254,6 +257,31 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   Measured ~0.4–0.5 ms/frame logic with Gatling, heavy cannon, beam, lightning and plasma firing.
 - Weapons still fire parallel from their hardpoints. Wide mounts (Roc arms at ±40) can pass
   either side of a small target dead ahead; revisit if it bothers the user.
+
+## Drone and enemy mech notes (M8 part 2)
+
+- `PlayerMech` became `Mech` (`units/Mech.ts`) with `MechOptions` (team, skin, armorScale,
+  damageMult, spreadMult, markers). `Mech.body` is the unit others see (an `EnemyMech` wraps its
+  mech), used for collision self, flares (`breakLocks`) and point defense team.
+- `EnemyMech` (`units/EnemyMech.ts`): an AI fills `PilotInput` each frame for a real `Mech`:
+  A* to the last seen spot (`PathFollower`), circles at `preferredRange` (backs off when too
+  close), aims so its best weapon's hardpoint line crosses the target (lead + wandering aim error),
+  fires a group when the torso is on target and the volley won't push heat past 90%, flares when
+  a missile homing on it is close, shield after taking ~35 damage quickly. Locational damage,
+  arm loss, leg slowdown, smoke and section bars above it. Wreck = `-wreck` texture set.
+- Enemy mech defs in `data/enemies.ts` (`kind: 'mech'`, `mech: EnemyMechDef`): raider (Kestrel),
+  trooper (Vulture), brawler (Condor), juggernaut (Roc), each with `armorScale` (0.5–0.8),
+  `damageScale` (0.33–0.4), `aimErrorDeg`, `strafe`, `reaction`. Measured duels vs the stock
+  Vulture with perfect mouse tracking: 9–20 s, costing the player ~130–330 armor.
+- `Drone` (`units/Drone.ts`): flies (`Enemy.flying`: not a body, ignores terrain), circles the
+  player at `orbitRange`, 40 HP, `droneGun`. Shadow sprite; wreck falls where the shadow was.
+  Last-seen markers for drones fade in 1.5 s.
+- Contracts roll `enemyMechs` and `droneFlights` per tier (`DESTROY_TARGETS.forces`), shown on
+  the board ("Expect: ...") and in the deploy panel; each mech adds 12% to the payout
+  (`ECONOMY.enemyMechPayBonus`). Mapgen places mechs near bases (patrolling them) and drone
+  flights (2–3 drones) between; `MissionMap.units`. Old boards are refreshed on load.
+- Enemy beams/pulses/streams use red textures (`*-enemy`). Dev: Spawn drones, Spawn enemy mech
+  (cycles types). Measured logic ~0.5–0.9 ms/frame with ~45 enemies (2 mechs, 11 drones) converging.
 
 ## Conventions
 

@@ -3,7 +3,7 @@ import type { Circle, CollisionWorld } from '../../core/collision';
 import type { ControlScheme } from '../../core/settings';
 import type { Vec } from '../../core/math';
 import { CHASSIS, type ChassisDef, type ChassisMovement, type MountDef, type Section } from '../../data/chassis';
-import { SectionDamage } from './SectionDamage';
+import { SECTIONS, SectionDamage } from './SectionDamage';
 import { HEAT_RULES } from '../../data/loadouts';
 import type { MechState } from '../../career/types';
 import { WEAPONS, type WeaponDef } from '../../data/weapons';
@@ -41,7 +41,25 @@ export interface PilotInput {
   equip2: boolean;
   /** Target seeking missiles will home on (null = fire unguided). */
   lock: Unit | null;
+  /** How far away the target is: splash shells burst there (0 = at full range). */
+  aimDistance?: number;
 }
+
+/** Options for mechs that aren't the player's (enemy mechs). */
+export interface MechOptions {
+  team: Team;
+  /** Enemy colours instead of the player's. */
+  skin: '' | '-enemy';
+  /** Multiplies every section's armor. */
+  armorScale: number;
+  /** Multiply weapon damage and spread (combat difficulty, enemy tuning). */
+  damageMult: number;
+  spreadMult: number;
+  /** Show the torso and leg markers (the player's mech). */
+  markers: boolean;
+}
+
+const PLAYER_OPTIONS: MechOptions = { team: 'player', skin: '', armorScale: 1, damageMult: 1, spreadMult: 1, markers: true };
 
 /** Runtime state of activated equipment. */
 export interface EquipmentState {
@@ -54,9 +72,13 @@ export interface EquipmentState {
   pdCooldown: number;
 }
 
-/** The player's mech in combat: movement, weapons, heat, ammo and armor. */
-export class PlayerMech implements Unit {
-  readonly team: Team = 'player';
+/**
+ * A mech in combat: movement, weapons, heat, ammo, armor and equipment. The
+ * player's mech is driven by the input layer; enemy mechs (`EnemyMech`) use the
+ * same class with an AI filling in the `PilotInput`.
+ */
+export class Mech implements Unit {
+  readonly team: Team;
   alive = true;
   radius: number;
   readonly chassis: ChassisDef;
@@ -85,21 +107,39 @@ export class PlayerMech implements Unit {
   equip: EquipmentState;
   private prevEquip = [false, false];
   private shieldImg: Phaser.GameObjects.Image;
+  /** What other units see and shoot at: this mech, or the enemy unit wrapping it. */
+  body: Unit = this;
+  /** False while hidden by fog of war (keeps the shield bubble hidden too). */
+  shown = true;
+  readonly opts: MechOptions;
 
-  constructor(scene: Phaser.Scene, state: MechState, movement: ChassisMovement, x: number, y: number, angle: number) {
+  constructor(
+    scene: Phaser.Scene,
+    state: MechState,
+    movement: ChassisMovement,
+    x: number,
+    y: number,
+    angle: number,
+    opts: Partial<MechOptions> = {},
+  ) {
+    this.opts = { ...PLAYER_OPTIONS, ...opts };
+    this.team = this.opts.team;
     this.chassis = CHASSIS[state.chassis];
     this.id = state.id;
     this.radius = this.chassis.radius;
     this.equipmentIds = [...state.equipment];
     this.loadout = mechStats(state);
-    this.sections = new SectionDamage(this.loadout.sections);
+    const k = this.opts.armorScale;
+    const max = this.loadout.sections;
+    this.sections = new SectionDamage(k === 1 ? max : { torso: max.torso * k, leftArm: max.leftArm * k, rightArm: max.rightArm * k, legs: max.legs * k });
     // Carry damage over from earlier missions (unrepaired sections).
     this.sections.hp = { ...state.sections };
+    if (k !== 1) for (const sec of SECTIONS) this.sections.hp[sec] = Math.min(this.sections.max[sec], state.sections[sec] * k);
     this.ammo = { ...state.ammo };
     this.motor = new MechMotor(movement, this.radius, x, y, angle);
     this.motor.crushTonnage = this.chassis.tonnage;
     // Art is drawn for a 30-radius (medium) mech; other chassis scale it.
-    this.view = new MechView(scene, this.motor, true, this.radius / 30);
+    this.view = new MechView(scene, this.motor, this.opts.markers, this.radius / 30, this.opts.skin);
     this.weapons = state.weapons.map((w) => ({
       def: WEAPONS[w.weapon],
       mount: this.chassis.mounts.find((m) => m.id === w.mount)!,
@@ -183,7 +223,7 @@ export class PlayerMech implements Unit {
       running ? input.aimTarget : null,
       world,
       bodies,
-      this,
+      this.body,
     );
 
     for (const w of this.weapons) {
@@ -200,14 +240,14 @@ export class PlayerMech implements Unit {
         w.held += dt;
         if (tick) this.stats.shots++;
         const { x, y } = this.muzzle(w);
-        combat.stream(x, y, this.motor.torsoAngle, w.def, 'player', dt, 1, tick);
+        combat.stream(x, y, this.motor.torsoAngle, w.def, this.team, dt, this.opts.damageMult, tick);
         this.heat += w.def.heat * dt;
         continue;
       }
       if (!held || w.cooldown > 0) continue;
       const pool = w.def.family === 'missile' ? 'missile' : 'ballistic';
       if (w.def.ammoPerShot > 0 && this.ammo[pool] < w.def.ammoPerShot) continue;
-      this.fireWeapon(w, combat, input.lock);
+      this.fireWeapon(w, combat, input.lock, input.aimDistance ?? 0);
       if (w.def.ammoPerShot > 0) {
         this.ammo[pool] -= w.def.ammoPerShot;
         this.stats.ammoUsed += w.def.ammoPerShot;
@@ -226,7 +266,7 @@ export class PlayerMech implements Unit {
     }
 
     this.view.update(dt);
-    this.shieldImg.setPosition(this.x, this.y).setVisible(this.equip.shieldUp > 0);
+    this.shieldImg.setPosition(this.x, this.y).setVisible(this.shown && this.equip.shieldUp > 0);
     return stepped;
   }
 
@@ -249,7 +289,7 @@ export class PlayerMech implements Unit {
       if (kind === 'flares' && L.flares && e.flares > 0 && e.flareCooldown === 0) {
         e.flares--;
         e.flareCooldown = L.flares.cooldown;
-        combat.missiles.breakLocks(this, this.x, this.y);
+        combat.missiles.breakLocks(this.body, this.x, this.y);
         combat.flareEffect(this.x, this.y);
         play('flare', 1);
       } else if (kind === 'shield' && L.shield && e.shieldCooldown === 0) {
@@ -265,7 +305,7 @@ export class PlayerMech implements Unit {
     if (pd && running) {
       e.pdCooldown = Math.max(0, e.pdCooldown - dt);
       if (e.pdCooldown === 0) {
-        const m = combat.missiles.nearestHostile(this.x, this.y, pd.range, 'player');
+        const m = combat.missiles.nearestHostile(this.x, this.y, pd.range, this.team);
         if (m) {
           combat.pointDefenseShot(this.x, this.y, m, pd.damage, pd.accuracy);
           e.pdCooldown = 1 / pd.fireRate;
@@ -379,8 +419,11 @@ export class PlayerMech implements Unit {
     return { x: m.pos.x + w.mount.x * ca - w.mount.y * sa, y: m.pos.y + w.mount.x * sa + w.mount.y * ca };
   }
 
-  private fireWeapon(w: MountedWeapon, combat: Combat, lock: Unit | null): void {
+  private fireWeapon(w: MountedWeapon, combat: Combat, lock: Unit | null, aimDistance: number): void {
     const { x, y } = this.muzzle(w);
-    combat.fire(x, y, this.motor.torsoAngle, w.def, 'player', 1, 1, 0, lock);
+    const o = this.opts;
+    // Splash shells burst at the target's distance from the muzzle, not the mech's centre.
+    const dist = aimDistance > 0 ? Math.max(40, aimDistance - w.mount.x) : 0;
+    combat.fire(x, y, this.motor.torsoAngle, w.def, this.team, o.damageMult, o.spreadMult, dist, lock);
   }
 }

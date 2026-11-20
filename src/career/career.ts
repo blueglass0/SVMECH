@@ -2,6 +2,8 @@ import { CHASSIS, CHASSIS_ORDER, type Section } from '../data/chassis';
 import { COMBAT_DIFFICULTY } from '../data/difficulty';
 import { CONTRACT_FLAVOR, ECONOMY, ECONOMY_DIFFICULTY, EMPLOYERS, ENEMY_FORCES, SHOP_STOCK } from '../data/economy';
 import { STARTER_LOADOUT } from '../data/loadouts';
+import { DESTROY_TARGETS } from '../data/missions';
+import { ENEMIES } from '../data/enemies';
 import { WEAPONS } from '../data/weapons';
 import { EQUIPMENT } from '../data/equipment';
 import { itemName, itemPrice, isEquipment } from '../data/items';
@@ -48,6 +50,8 @@ export function loadCareer(): CareerState | null {
       if (!m.equipment) m.equipment = [...STARTER_LOADOUT.equipment];
       normalizeMech(m);
     }
+    // Boards from before enemy mechs and drones (M8) get fresh contracts that include them.
+    if (s.activeContract === null && s.contracts.length && s.contracts.every((k) => k.enemyMechs === undefined)) refreshContracts(s);
     return s;
   } catch {
     return null;
@@ -392,7 +396,9 @@ function makeContract(s: CareerState): Contract {
   const limited = Math.random() < ECONOMY.tonnageLimitChance;
   const maxTonnage = limited ? pick(ECONOMY.tonnageLimits) : undefined;
   const base = (t.payout[0] + Math.random() * (t.payout[1] - t.payout[0])) * econ(s).payouts;
-  const payout = Math.round((base * (limited ? 1 + ECONOMY.tonnageLimitPayBonus : 1)) / 500) * 500;
+  const forces = rollForces(tier);
+  const bonus = (limited ? ECONOMY.tonnageLimitPayBonus : 0) + forces.enemyMechs.length * ECONOMY.enemyMechPayBonus;
+  const payout = Math.round((base * (1 + bonus)) / 500) * 500;
   return {
     id: s.nextContractId++,
     seed: randomSeed(),
@@ -404,7 +410,30 @@ function makeContract(s: CareerState): Contract {
     payout,
     bonus: makeBonus(t.targets),
     maxTonnage,
+    ...forces,
   };
+}
+
+/** Enemy mechs and drone flights for a contract of this tier (data/missions.ts). */
+function rollForces(tier: 1 | 2 | 3): { enemyMechs: string[]; droneFlights: number } {
+  const f = DESTROY_TARGETS.forces[tier];
+  const int = (r: [number, number]) => r[0] + Math.floor(Math.random() * (r[1] - r[0] + 1));
+  const enemyMechs: string[] = [];
+  for (let n = int(f.mechs); n > 0; n--) {
+    let r = Math.random() * f.mechTypes.reduce((t, m) => t + m.weight, 0);
+    const pick = f.mechTypes.find((m) => (r -= m.weight) <= 0) ?? f.mechTypes[0];
+    enemyMechs.push(pick.type);
+  }
+  return { enemyMechs, droneFlights: int(f.droneFlights) };
+}
+
+/** Short description of a contract's enemy mechs and drones for the board ('' if none). */
+export function forcesLabel(k: Contract): string {
+  const parts: string[] = [];
+  const mechs = k.enemyMechs ?? [];
+  if (mechs.length) parts.push(mechs.map((id) => ENEMIES[id]?.name ?? id).join(', '));
+  if (k.droneFlights) parts.push(`${k.droneFlights} drone flight${k.droneFlights > 1 ? 's' : ''}`);
+  return parts.join(' · ');
 }
 
 function pickTier(): 1 | 2 | 3 {
