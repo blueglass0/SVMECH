@@ -142,6 +142,7 @@ Milestones 1 to 5 are the prototype: a complete, playable loop with one mech, a 
 8. **Enemies and weapons.** Drones, enemy mechs that use the player's systems, and the rest of the weapons: Gatling gun, heavy cannon, more lasers, plasma, and lightning. Laser variants include continuous-beam lasers (damage and heat per second while held) alongside pulse lasers, with different range and heat trade-offs.
    - Built in two parts: weapons first, then drones and enemy mechs (which use the new weapons). Contracts show the enemy mechs and drone flights to expect, and each enemy mech raises the payout.
 9. **Factions.** Three factions with their colors and army styles, reputation, and reputation-gated shops.
+   - Built: each faction has its own army mix and colours (Royalist heavy tanks, Technocrat laser tanks and turrets, Freestar technicals and extra drones, faction mech variants), an open market everyone can buy from, and faction shops whose best gear (Condor, Roc, top energy weapons) needs standing to unlock. Freestar friends get open-market discounts.
 10. **More mission types.** Defend, escort, convoy raid, and mech hunt.
    - Also (requested after M7): **different map sizes**, with some maps bigger, as long as performance holds.
 11. **Polish.** Difficulty settings menu, tutorial, sound pass, menu and phone UI pass, and a performance check on your phone. The phone UI pass should rethink the buttons around the right stick (weapon swap, two equipment actions, interact), which get crowded as features are added.
@@ -174,12 +175,13 @@ This is a new game project. Read docs/PLAN.md: it's the full design and build pl
 - Phone weapon groups: the right stick fires the selected group; a button next to it switches between group 1 and 2. A smoother phone solution is still wanted later.
 - Aim assist on phones stays light.
 - One backup mech per mission: a single extra chance (after M7).
-- Field stations (ammo, repair, swap) are single-use per station; field repair can't fix destroyed sections. They cost 3× hangar prices (swap fee ¢16k) so spending mid-mission is a real trade-off against the payout (raised from 1.5× after M7).
+- Field stations (ammo, repair, swap) are single-use per station; field repair can't fix destroyed sections. Ammo costs 3× hangar prices and repairs 2× (swap fee ¢16k), so spending mid-mission is a real trade-off against the payout (raised from 1.5× after M7; repairs eased to 2× after M8).
+- Mounts are sized (small, medium, large) instead of ballistic/energy/missile: arm and torso mounts take any gun or laser up to their size, and back mounts take missiles (artillery later). Heavy weapons gravitate to heavy frames, with the odd exception like the Shrike (one large gun, nothing else). Frames make some power of their own and the reactor adds to it; the reactor has its own place in the loadout instead of using internal slots (after M8).
+- Weapons keep fixed, parallel aim from their hardpoints (no convergence). Medium and heavy enemy mechs are a little bigger than the player's versions, the Condor's and Roc's arm mounts were narrowed, and bigger tanks and turrets that are easier to hit may come later.
 - Current weapons don't need to destroy buildings faster; heavier weapons (heavy cannon, plasma) are the building-wreckers.
 
 ## Open questions
 
-- [ ] **Weapon convergence.** Weapons fire straight ahead from their hardpoints, so wide mounts (the Roc's arms) can pass either side of a small target dead ahead. Options are on the table; nothing changes until decided.
 
 - [ ] **Phone weapon firing.** The tap-to-switch button works for now; find something easier to use before release.
 

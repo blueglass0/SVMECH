@@ -32,8 +32,9 @@ export const ECONOMY = {
   enemyMechPayBonus: 0.12,
   /** Field stations (ammo depot, repair bay, swap station) on some maps. */
   field: {
-    /** Field services cost this many times the hangar price. */
-    markup: 3,
+    /** Field services cost this many times the hangar price: repairs and ammo separately. */
+    repairMarkup: 2,
+    ammoMarkup: 3,
     /** Paying the cargo crew to swap your mech for the backup. */
     swapFee: 16000,
     /** How many stations a map gets, and the chance each one is a swap station. */
@@ -74,7 +75,7 @@ export const ECONOMY_DIFFICULTY: Record<'easy' | 'normal' | 'hard', EconomyDiffi
   hard: { costs: 1.25, payouts: 0.85, interest: 1.5, bankruptcyEndsCareer: true },
 };
 
-/** Weapons the shop sells (factions and reputation change this from milestone 9). */
+/** Everything the shop lists, in display order. Who sells what, and at what reputation: data/factions.ts. */
 export const SHOP_STOCK = [
   // Weapons
   'machineGun',
@@ -91,6 +92,7 @@ export const SHOP_STOCK = [
   'lightning',
   'rocketPod',
   'missilePack',
+  'missileRack',
   // Equipment
   'lightReactor',
   'standardReactor',
@@ -108,18 +110,7 @@ export const SHOP_STOCK = [
   'radarArray',
 ];
 
-/** Contract flavour: faction-neutral until milestone 9 adds the three factions. */
-export const EMPLOYERS = [
-  'Halden Mining Combine',
-  'Kestrel Freight Lines',
-  'Orrin Colonial Authority',
-  'Varga Salvage Co.',
-  'Tessaly Water Trust',
-  'Brannock Agricultural Cooperative',
-];
-
-export const ENEMY_FORCES = ['Dustline Militia', 'Red Ridge Separatists', 'Ashfall Raiders', 'Corvan Defence Garrison'];
-
+/** Contract flavour. Employer and enemy names come from the factions (data/factions.ts). */
 export const CONTRACT_FLAVOR = [
   'The {enemy} have been coordinating raids through a string of uplink towers. {employer} wants them gone.',
   '{employer} needs the {enemy} relay network silenced before their convoy moves through.',

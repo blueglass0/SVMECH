@@ -26,6 +26,20 @@ const ENEMY_MECH = {
   accent: 0xff5a4f,
   canopy: 0x1c1416,
 };
+const TECH_MECH = {
+  hull: 0x46607e,
+  hullDark: 0x2c3e54,
+  edge: 0x9cc4ec,
+  accent: 0x9fd8ff,
+  canopy: 0x121a24,
+};
+const FREE_MECH = {
+  hull: 0x725f44,
+  hullDark: 0x4b3e2c,
+  edge: 0xbca178,
+  accent: 0xff9a3d,
+  canopy: 0x1c1712,
+};
 const WRECK_MECH = {
   hull: 0x34383b,
   hullDark: 0x232628,
@@ -64,6 +78,9 @@ export function bakeArt(scene: Phaser.Scene): void {
   for (const [suffix, P] of [
     ['', C],
     ['-enemy', ENEMY_MECH],
+    ['-royal', ENEMY_MECH],
+    ['-tech', TECH_MECH],
+    ['-free', FREE_MECH],
     ['-wreck', WRECK_MECH],
   ] as const) {
     // Foot: a long pad with three forward talons, so walking direction reads at a glance.
@@ -170,38 +187,88 @@ export function bakeArt(scene: Phaser.Scene): void {
   );
 }
 
-const E = {
-  hull: 0x5b6450,
-  hullDark: 0x3d4436,
-  edge: 0x9aa58a,
-  accent: 0xff5a4f,
+/**
+ * Enemy army colours. '' is the faction-neutral army (dev spawns, old saves); the
+ * others are the Royalists (red), Technocrats (blue) and Freestars (dirt brown).
+ */
+const ARMY_PALETTES: Record<string, { hull: number; hullDark: number; edge: number; accent: number }> = {
+  '': { hull: 0x5b6450, hullDark: 0x3d4436, edge: 0x9aa58a, accent: 0xff5a4f },
+  '-royal': { hull: 0x7a4a44, hullDark: 0x4e2f2b, edge: 0xc99086, accent: 0xff5a4f },
+  '-tech': { hull: 0x3f5a78, hullDark: 0x283b50, edge: 0x95bde6, accent: 0x9fd8ff },
+  '-free': { hull: 0x6e5c40, hullDark: 0x4a3c2a, edge: 0xb89c72, accent: 0xff9a3d },
 };
+
+/** Small four-rotor drone (facing +x). */
+function bakeDrone(scene: Phaser.Scene, key: string, body: number, rotor: number, light: number): void {
+  bake(scene, key, 40, 40, (g) => {
+    g.lineStyle(3, body, 1);
+    for (const [x, y] of [[10, -10], [10, 10], [-10, -10], [-10, 10]]) g.lineBetween(0, 0, x, y);
+    g.fillStyle(rotor, 0.45);
+    for (const [x, y] of [[10, -10], [10, 10], [-10, -10], [-10, 10]]) g.fillCircle(x, y, 7);
+    g.lineStyle(1, rotor, 0.9);
+    for (const [x, y] of [[10, -10], [10, 10], [-10, -10], [-10, 10]]) g.strokeCircle(x, y, 7);
+    g.fillStyle(body).fillRoundedRect(-7, -5, 15, 10, 3);
+    g.fillStyle(0x2a1e1c).fillRect(6, -1.5, 8, 3);
+    g.fillStyle(light).fillCircle(3, 0, 2.2);
+  });
+}
 
 /** Enemy art, projectiles, effects and HUD pieces. */
 export function bakeCombatArt(scene: Phaser.Scene): void {
-  // Tank hull: tracks either side, body, red sensor light at the front.
-  for (const wreck of [false, true]) {
-    const k = wreck ? 'tank-hull-wreck' : 'tank-hull';
-    bake(scene, k, 64, 52, (g) => {
-      const a = wreck ? 0.55 : 1;
-      g.fillStyle(wreck ? 0x232628 : C.hullDark, 1);
+  // Enemy vehicles, turrets and drones, in each army's colours (no tint in Canvas mode).
+  for (const [skin, P] of Object.entries(ARMY_PALETTES)) {
+    // Tank hull: tracks either side, body, sensor light at the front.
+    bake(scene, 'tank-hull' + skin, 64, 52, (g) => {
+      g.fillStyle(P.hullDark, 1);
       g.fillRoundedRect(-28, -24, 56, 12, 3);
       g.fillRoundedRect(-28, 12, 56, 12, 3);
-      g.fillStyle(wreck ? 0x2e3330 : E.hull, 1).fillRoundedRect(-24, -15, 48, 30, 5);
-      g.lineStyle(1.5, wreck ? 0x45494a : E.edge, a).strokeRoundedRect(-24, -15, 48, 30, 5);
-      if (!wreck) g.fillStyle(E.accent).fillRect(19, -4, 4, 8);
+      g.fillStyle(P.hull, 1).fillRoundedRect(-24, -15, 48, 30, 5);
+      g.lineStyle(1.5, P.edge, 1).strokeRoundedRect(-24, -15, 48, 30, 5);
+      g.fillStyle(P.accent).fillRect(19, -4, 4, 8);
     });
-  }
-  bake(scene, 'tank-turret', 60, 30, (g) => {
-    g.fillStyle(E.hullDark).fillRect(6, -3, 22, 6);
-    g.fillStyle(E.hull).fillCircle(0, 0, 11);
-    g.lineStyle(1.5, E.edge).strokeCircle(0, 0, 11);
-  });
+    bake(scene, 'tank-turret' + skin, 60, 30, (g) => {
+      g.fillStyle(P.hullDark).fillRect(6, -3, 22, 6);
+      g.fillStyle(P.hull).fillCircle(0, 0, 11);
+      g.lineStyle(1.5, P.edge).strokeCircle(0, 0, 11);
+    });
+    // Heavy tank: wider, longer, double tracks and a twin-barrel turret.
+    bake(scene, 'tank-heavy-hull' + skin, 84, 70, (g) => {
+      g.fillStyle(P.hullDark, 1);
+      g.fillRoundedRect(-38, -32, 76, 16, 4);
+      g.fillRoundedRect(-38, 16, 76, 16, 4);
+      g.fillStyle(P.hull, 1).fillRoundedRect(-33, -20, 66, 40, 6);
+      g.lineStyle(2, P.edge, 1).strokeRoundedRect(-33, -20, 66, 40, 6);
+      g.lineStyle(1, P.edge, 0.6).lineBetween(-20, -20, -20, 20);
+      g.fillStyle(P.accent).fillRect(27, -5, 4, 10);
+    });
+    bake(scene, 'tank-heavy-turret' + skin, 80, 40, (g) => {
+      g.fillStyle(P.hullDark).fillRect(8, -6, 30, 4).fillRect(8, 2, 30, 4);
+      g.fillStyle(P.hull).fillRoundedRect(-15, -14, 28, 28, 6);
+      g.lineStyle(1.5, P.edge).strokeRoundedRect(-15, -14, 28, 28, 6);
+    });
+    // Laser tank turret: a lens instead of a barrel.
+    bake(scene, 'tank-laser-turret' + skin, 60, 30, (g) => {
+      g.fillStyle(P.hullDark).fillRect(6, -2.5, 16, 5);
+      g.fillStyle(P.hull).fillCircle(0, 0, 11);
+      g.lineStyle(1.5, P.edge).strokeCircle(0, 0, 11);
+      g.fillStyle(0xbfe8ff).fillCircle(23, 0, 3.5);
+    });
+    // Technical: a pickup truck with a gun in the bed.
+    bake(scene, 'technical-hull' + skin, 52, 32, (g) => {
+      g.fillStyle(0x1e2124).fillRect(-17, -14, 9, 4).fillRect(-17, 10, 9, 4).fillRect(10, -14, 9, 4).fillRect(10, 10, 9, 4);
+      g.fillStyle(P.hull).fillRoundedRect(-20, -11, 42, 22, 4);
+      g.lineStyle(1.5, P.edge).strokeRoundedRect(-20, -11, 42, 22, 4);
+      g.fillStyle(0x1c2329).fillRoundedRect(6, -8, 9, 16, 2);
+      g.fillStyle(P.accent).fillRect(19, -7, 2, 3).fillRect(19, 4, 2, 3);
+    });
+    bake(scene, 'technical-gun' + skin, 44, 16, (g) => {
+      g.fillStyle(P.hullDark).fillRect(2, -1.5, 16, 3);
+      g.fillStyle(P.edge).fillCircle(0, 0, 4);
+    });
 
-  // Turrets: armoured base and a rotating gun.
-  for (const wreck of [false, true]) {
-    bake(scene, wreck ? 'turret-base-wreck' : 'turret-base', 56, 56, (g) => {
-      g.fillStyle(wreck ? 0x26292b : E.hullDark);
+    // Turrets: armoured base and a rotating gun.
+    bake(scene, 'turret-base' + skin, 56, 56, (g) => {
+      g.fillStyle(P.hullDark);
       g.beginPath();
       for (let i = 0; i < 8; i++) {
         const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
@@ -210,20 +277,59 @@ export function bakeCombatArt(scene: Phaser.Scene): void {
       }
       g.closePath();
       g.fillPath();
-      g.lineStyle(1.5, wreck ? 0x45494a : E.edge, 1).strokePath();
+      g.lineStyle(1.5, P.edge, 1).strokePath();
     });
+    bake(scene, 'turret-gun' + skin, 64, 30, (g) => {
+      g.fillStyle(P.hullDark).fillRect(6, -5, 22, 3).fillRect(6, 2, 22, 3);
+      g.fillStyle(P.hull).fillCircle(0, 0, 12);
+      g.lineStyle(1.5, P.edge).strokeCircle(0, 0, 12);
+      g.fillStyle(P.accent).fillCircle(4, 0, 3);
+    });
+    bake(scene, 'turret-cannon' + skin, 72, 34, (g) => {
+      g.fillStyle(P.hullDark).fillRect(8, -4, 26, 8);
+      g.fillStyle(P.hull).fillRoundedRect(-13, -13, 26, 26, 5);
+      g.lineStyle(1.5, P.edge).strokeRoundedRect(-13, -13, 26, 26, 5);
+      g.fillStyle(P.accent).fillCircle(3, 0, 3);
+    });
+    bake(scene, 'turret-laser' + skin, 64, 34, (g) => {
+      g.fillStyle(P.hullDark).fillRect(8, -3, 18, 6);
+      g.fillStyle(P.hull).fillCircle(0, 0, 13);
+      g.lineStyle(1.5, P.edge).strokeCircle(0, 0, 13);
+      g.fillStyle(0xbfe8ff).fillCircle(28, 0, 4);
+      g.fillStyle(P.accent).fillCircle(3, 0, 3);
+    });
+    bakeDrone(scene, 'drone' + skin, P.hull, P.edge, P.accent);
   }
-  bake(scene, 'turret-gun', 64, 30, (g) => {
-    g.fillStyle(E.hullDark).fillRect(6, -5, 22, 3).fillRect(6, 2, 22, 3);
-    g.fillStyle(E.hull).fillCircle(0, 0, 12);
-    g.lineStyle(1.5, E.edge).strokeCircle(0, 0, 12);
-    g.fillStyle(E.accent).fillCircle(4, 0, 3);
+  // Wrecks: one charred version per shape.
+  bake(scene, 'tank-hull-wreck', 64, 52, (g) => {
+    g.fillStyle(0x232628, 1);
+    g.fillRoundedRect(-28, -24, 56, 12, 3);
+    g.fillRoundedRect(-28, 12, 56, 12, 3);
+    g.fillStyle(0x2e3330, 1).fillRoundedRect(-24, -15, 48, 30, 5);
+    g.lineStyle(1.5, 0x45494a, 0.55).strokeRoundedRect(-24, -15, 48, 30, 5);
   });
-  bake(scene, 'turret-cannon', 72, 34, (g) => {
-    g.fillStyle(E.hullDark).fillRect(8, -4, 26, 8);
-    g.fillStyle(E.hull).fillRoundedRect(-13, -13, 26, 26, 5);
-    g.lineStyle(1.5, E.edge).strokeRoundedRect(-13, -13, 26, 26, 5);
-    g.fillStyle(E.accent).fillCircle(3, 0, 3);
+  bake(scene, 'tank-heavy-hull-wreck', 84, 70, (g) => {
+    g.fillStyle(0x232628, 1);
+    g.fillRoundedRect(-38, -32, 76, 16, 4);
+    g.fillRoundedRect(-38, 16, 76, 16, 4);
+    g.fillStyle(0x2e3330, 1).fillRoundedRect(-33, -20, 66, 40, 6);
+    g.lineStyle(2, 0x45494a, 0.55).strokeRoundedRect(-33, -20, 66, 40, 6);
+  });
+  bake(scene, 'technical-hull-wreck', 52, 32, (g) => {
+    g.fillStyle(0x2c2f31).fillRoundedRect(-20, -11, 42, 22, 4);
+    g.lineStyle(1.5, 0x45494a, 0.6).strokeRoundedRect(-20, -11, 42, 22, 4);
+  });
+  bake(scene, 'turret-base-wreck', 56, 56, (g) => {
+    g.fillStyle(0x26292b);
+    g.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+      if (i === 0) g.moveTo(Math.cos(a) * 25, Math.sin(a) * 25);
+      else g.lineTo(Math.cos(a) * 25, Math.sin(a) * 25);
+    }
+    g.closePath();
+    g.fillPath();
+    g.lineStyle(1.5, 0x45494a, 1).strokePath();
   });
 
   // Uplink tower (mission target): mast with dish arms and a pulsing core.
@@ -309,20 +415,7 @@ export function bakeCombatArt(scene: Phaser.Scene): void {
     g.fillStyle(0xffffff, 1).fillRect(-32, -1.75, 64, 3.5);
   });
   // Drones: a small four-rotor craft (facing +x), its shadow on the ground, and a wreck.
-  const drone = (key: string, body: number, rotor: number, light: number) =>
-    bake(scene, key, 40, 40, (g) => {
-      g.lineStyle(3, body, 1);
-      for (const [x, y] of [[10, -10], [10, 10], [-10, -10], [-10, 10]]) g.lineBetween(0, 0, x, y);
-      g.fillStyle(rotor, 0.45);
-      for (const [x, y] of [[10, -10], [10, 10], [-10, -10], [-10, 10]]) g.fillCircle(x, y, 7);
-      g.lineStyle(1, rotor, 0.9);
-      for (const [x, y] of [[10, -10], [10, 10], [-10, -10], [-10, 10]]) g.strokeCircle(x, y, 7);
-      g.fillStyle(body).fillRoundedRect(-7, -5, 15, 10, 3);
-      g.fillStyle(0x2a1e1c).fillRect(6, -1.5, 8, 3);
-      g.fillStyle(light).fillCircle(3, 0, 2.2);
-    });
-  drone('drone', 0x7a4f48, 0xc9a49c, 0xff5a4f);
-  drone('drone-wreck', 0x2c2f31, 0x3c4144, 0x3b3f42);
+  bakeDrone(scene, 'drone-wreck', 0x2c2f31, 0x3c4144, 0x3b3f42);
   bake(scene, 'drone-shadow', 40, 40, (g) => {
     g.fillStyle(0x000000, 0.3).fillCircle(0, 0, 14);
   });

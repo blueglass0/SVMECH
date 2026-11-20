@@ -30,6 +30,8 @@ export interface EnemyDef {
   crushTonnage?: number;
   /** Drones: circle the player at about this distance. */
   orbitRange?: number;
+  /** Texture names (before the faction colour suffix). Defaults: tank-hull / tank-turret, turret-base / turret-gun. */
+  art?: { body?: string; gun?: string };
   /** Enemy mechs: what they field, and how they fight. */
   mech?: EnemyMechDef;
 }
@@ -49,6 +51,12 @@ export interface EnemyMechDef {
   strafe: number;
   /** Seconds after spotting you before they open fire. */
   reaction: number;
+  /**
+   * Body size relative to the player's version of the chassis. Medium and heavy enemy mechs are
+   * a little bigger so both arms' guns can land on them (weapons fire straight from their mounts).
+   * Keep the diameter under the 100-unit minimum gap between obstacles.
+   */
+  sizeScale?: number;
 }
 
 export const ENEMIES: Record<string, EnemyDef> = {
@@ -83,6 +91,70 @@ export const ENEMIES: Record<string, EnemyDef> = {
     preferredRange: 520,
     aimLead: 0,
     crushTonnage: 35,
+  },
+  // --- Milestone 9: faction units ---
+  heavyTank: {
+    id: 'heavyTank',
+    name: 'Heavy tank',
+    kind: 'tank',
+    hp: 280,
+    radius: 34,
+    weapon: 'heavyTankCannon',
+    speed: 75,
+    accel: 70,
+    hullTurnRate: 60,
+    turretTurnRate: 70,
+    detectRange: 650,
+    preferredRange: 420,
+    aimLead: 0.5,
+    crushTonnage: 60,
+    art: { body: 'tank-heavy-hull', gun: 'tank-heavy-turret' },
+  },
+  laserTank: {
+    id: 'laserTank',
+    name: 'Laser tank',
+    kind: 'tank',
+    hp: 120,
+    radius: 26,
+    weapon: 'tankLaser',
+    speed: 105,
+    accel: 110,
+    hullTurnRate: 90,
+    turretTurnRate: 100,
+    detectRange: 720,
+    preferredRange: 440,
+    aimLead: 0,
+    crushTonnage: 35,
+    art: { gun: 'tank-laser-turret' },
+  },
+  technical: {
+    id: 'technical',
+    name: 'Technical',
+    kind: 'tank',
+    hp: 70,
+    radius: 22,
+    weapon: 'technicalGun',
+    speed: 175,
+    accel: 220,
+    hullTurnRate: 150,
+    turretTurnRate: 220,
+    detectRange: 650,
+    preferredRange: 300,
+    aimLead: 0.3,
+    crushTonnage: 30,
+    art: { body: 'technical-hull', gun: 'technical-gun' },
+  },
+  laserTurret: {
+    id: 'laserTurret',
+    name: 'Laser turret',
+    kind: 'turret',
+    hp: 190,
+    radius: 24,
+    weapon: 'turretLaser',
+    turretTurnRate: 80,
+    detectRange: 640,
+    aimLead: 0,
+    art: { gun: 'turret-laser' },
   },
   gunTurret: {
     id: 'gunTurret',
@@ -176,6 +248,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
       damageScale: 0.37,
       aimErrorDeg: 4,
       strafe: 0.7,
+      sizeScale: 1.1,
       reaction: 0.8,
     },
   },
@@ -196,11 +269,12 @@ export const ENEMIES: Record<string, EnemyDef> = {
         { mount: 'ra-e', weapon: 'beamLaser', group: 2 },
         { mount: 't-m', weapon: 'rocketPod', group: 2 },
       ],
-      equipment: ['standardReactor', 'heatSink', 'heatSink', 'shieldGenerator'],
+      equipment: ['heavyReactor', 'heatSink', 'heatSink', 'shieldGenerator'],
       armorScale: 0.7,
       damageScale: 0.33,
       aimErrorDeg: 4,
       strafe: 0.5,
+      sizeScale: 1.15,
       reaction: 0.9,
     },
   },
@@ -217,9 +291,9 @@ export const ENEMIES: Record<string, EnemyDef> = {
       chassis: 'roc',
       weapons: [
         { mount: 'la-b', weapon: 'heavyCannon', group: 1 },
-        { mount: 'ra-b', weapon: 'autocannon', group: 1 },
-        { mount: 'la-e', weapon: 'largeLaser', group: 2 },
-        { mount: 'ra-e', weapon: 'laser', group: 2 },
+        { mount: 'la-e', weapon: 'autocannon', group: 1 },
+        { mount: 'ra-b', weapon: 'largeLaser', group: 2 },
+        { mount: 'ra-e', weapon: 'pulseLaser', group: 2 },
         { mount: 't-m', weapon: 'missilePack', group: 2 },
       ],
       equipment: ['assaultReactor', 'heatSink', 'heatSink', 'pointDefense'],
@@ -227,7 +301,78 @@ export const ENEMIES: Record<string, EnemyDef> = {
       damageScale: 0.36,
       aimErrorDeg: 3.5,
       strafe: 0.3,
+      sizeScale: 1.12,
       reaction: 1,
+    },
+  },
+  lancer: {
+    id: 'lancer',
+    name: 'Lancer (Vulture)',
+    kind: 'mech',
+    hp: 0,
+    radius: 0,
+    detectRange: 720,
+    preferredRange: 460,
+    aimLead: 0,
+    mech: {
+      chassis: 'vulture',
+      weapons: [
+        { mount: 'la-b', weapon: 'laser', group: 1 },
+        { mount: 'ra-e', weapon: 'laser', group: 1 },
+        { mount: 'la-e', weapon: 'pulseLaser', group: 2 },
+      ],
+      equipment: ['heavyReactor', 'heatSink', 'doubleHeatSink'],
+      armorScale: 0.6,
+      damageScale: 0.4,
+      aimErrorDeg: 3.5,
+      strafe: 0.7,
+      reaction: 0.8,
+      sizeScale: 1.1,
+    },
+  },
+  warden: {
+    id: 'warden',
+    name: 'Warden (Condor)',
+    kind: 'mech',
+    hp: 0,
+    radius: 0,
+    detectRange: 720,
+    preferredRange: 520,
+    aimLead: 0.4,
+    mech: {
+      chassis: 'condor',
+      weapons: [
+        { mount: 'la-b', weapon: 'largeLaser', group: 1 },
+        { mount: 'ra-b', weapon: 'pulseLaser', group: 2 },
+        { mount: 't-m', weapon: 'missilePack', group: 2 },
+      ],
+      equipment: ['assaultReactor', 'doubleHeatSink', 'shieldGenerator'],
+      armorScale: 0.7,
+      damageScale: 0.35,
+      aimErrorDeg: 3,
+      strafe: 0.45,
+      reaction: 0.9,
+      sizeScale: 1.15,
+    },
+  },
+  skirmisher: {
+    id: 'skirmisher',
+    name: 'Skirmisher (Shrike)',
+    kind: 'mech',
+    hp: 0,
+    radius: 0,
+    detectRange: 700,
+    preferredRange: 380,
+    aimLead: 0.5,
+    mech: {
+      chassis: 'shrike',
+      weapons: [{ mount: 't-l', weapon: 'heavyCannon', group: 1 }],
+      equipment: ['lightReactor', 'ammoBin'],
+      armorScale: 0.5,
+      damageScale: 0.4,
+      aimErrorDeg: 4,
+      strafe: 0.9,
+      reaction: 0.7,
     },
   },
 };

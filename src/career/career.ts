@@ -1,13 +1,14 @@
 import { CHASSIS, CHASSIS_ORDER, type Section } from '../data/chassis';
 import { COMBAT_DIFFICULTY } from '../data/difficulty';
-import { CONTRACT_FLAVOR, ECONOMY, ECONOMY_DIFFICULTY, EMPLOYERS, ENEMY_FORCES, SHOP_STOCK } from '../data/economy';
+import { CONTRACT_FLAVOR, ECONOMY, ECONOMY_DIFFICULTY } from '../data/economy';
+import { FACTIONS, FACTION_ORDER, OPEN_MARKET, REPUTATION, type FactionId } from '../data/factions';
 import { STARTER_LOADOUT } from '../data/loadouts';
 import { DESTROY_TARGETS } from '../data/missions';
 import { ENEMIES } from '../data/enemies';
 import { WEAPONS } from '../data/weapons';
 import { EQUIPMENT } from '../data/equipment';
 import { itemName, itemPrice, isEquipment } from '../data/items';
-import { mechStats } from '../game/mechStats';
+import { fitsMount, mechStats } from '../game/mechStats';
 import { SECTIONS } from '../game/units/SectionDamage';
 import { randomSeed } from '../core/rng';
 import type {
@@ -31,6 +32,9 @@ const SAVE_KEY = 'steel-vulture.career.v1';
 
 // ---------- Persistence ----------
 
+/** Things changed while loading an old save, for the hangar to mention once. */
+export const loadNotes: string[] = [];
+
 export function loadCareer(): CareerState | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
@@ -48,10 +52,21 @@ export function loadCareer(): CareerState | null {
     for (const m of s.mechs) {
       // Saves from before equipment existed (M5): give the mech the starter reactor and heat sink.
       if (!m.equipment) m.equipment = [...STARTER_LOADOUT.equipment];
+      // Sized mounts (after M8): weapons that no longer fit their mount go to storage.
+      const mounts = CHASSIS[m.chassis].mounts;
+      for (const w of [...m.weapons]) {
+        const mount = mounts.find((x) => x.id === w.mount);
+        if (mount && WEAPONS[w.weapon] && fitsMount(WEAPONS[w.weapon], mount)) continue;
+        m.weapons.splice(m.weapons.indexOf(w), 1);
+        if (WEAPONS[w.weapon]) s.inventory.push(w.weapon);
+        loadNotes.push(`${WEAPONS[w.weapon]?.name ?? w.weapon} didn't fit the new ${CHASSIS[m.chassis].name} mounts and was moved to storage.`);
+      }
       normalizeMech(m);
     }
-    // Boards from before enemy mechs and drones (M8) get fresh contracts that include them.
-    if (s.activeContract === null && s.contracts.length && s.contracts.every((k) => k.enemyMechs === undefined)) refreshContracts(s);
+    // Factions (M9): everyone starts neutral.
+    s.reputation = Object.assign({ royalists: 0, technocrats: 0, freestars: 0 }, s.reputation);
+    // Boards from before factions (M9) get fresh contracts with employers, enemies and their armies.
+    if (s.activeContract === null && s.contracts.length && s.contracts.every((k) => k.employerFaction === undefined)) refreshContracts(s);
     return s;
   } catch {
     return null;
@@ -85,6 +100,7 @@ export function newCareer(combat: CombatLevel, economy: CombatLevel): CareerStat
     nextMechId: 1,
     inventory: [],
     contracts: [],
+    reputation: { royalists: 0, technocrats: 0, freestars: 0 },
     difficulty: { combat, economy },
     stats: { missions: 0, wins: 0, earned: 0, spent: 0 },
     nextContractId: 1,
@@ -182,11 +198,11 @@ export function toggleBackup(s: CareerState, id: number): void {
 }
 
 export function chassisPrice(s: CareerState, chassisId: string): number {
-  return price(s, CHASSIS[chassisId].price);
+  return shopPrice(s, chassisId, CHASSIS[chassisId].price);
 }
 
 export function buyChassis(s: CareerState, chassisId: string): MechState | null {
-  if (!CHASSIS_ORDER.includes(chassisId)) return null;
+  if (!CHASSIS_ORDER.includes(chassisId) || !shopStatus(s, chassisId).available) return null;
   const cost = chassisPrice(s, chassisId);
   if (cost > s.money) return null;
   spend(s, cost);
@@ -229,7 +245,7 @@ export interface LoadoutCheck {
 export function checkLoadout(m: MechState): LoadoutCheck {
   const st = mechStats(m);
   const problems: string[] = [];
-  if (st.reactors.length !== 1) problems.push(st.reactors.length === 0 ? 'No reactor installed' : 'Only one reactor allowed');
+  if (st.reactors.length > 1) problems.push('Only one reactor allowed');
   if (st.tonnage > st.maxTonnage) problems.push(`Too heavy: ${st.tonnage} / ${st.maxTonnage} t`);
   if (st.powerDraw > st.powerOutput) problems.push(`Not enough power: ${st.powerDraw} / ${st.powerOutput}`);
   if (st.slotsUsed > st.slots) problems.push(`Too many internal slots used: ${st.slotsUsed} / ${st.slots}`);
@@ -300,8 +316,8 @@ export function rebuild(s: CareerState, m: MechState): boolean {
 // ---------- Shop and installing ----------
 
 export function buyItem(s: CareerState, id: string): boolean {
-  const cost = price(s, itemPrice(id));
-  if (!SHOP_STOCK.includes(id) || cost > s.money) return false;
+  const cost = itemShopPrice(s, id);
+  if (!shopStatus(s, id).available || cost > s.money) return false;
   spend(s, cost);
   s.inventory.push(id);
   return true;
@@ -313,6 +329,24 @@ export function sellItem(s: CareerState, inventoryIndex: number): boolean {
   s.inventory.splice(inventoryIndex, 1);
   earn(s, sellPrice(s, id));
   return true;
+}
+
+/** Fit an owned reactor ('' = none; the frame's own power still runs the mech). The old one goes to inventory. */
+export function setReactor(s: CareerState, m: MechState, id: string): boolean {
+  if (id && (s.inventory.indexOf(id) < 0 || EQUIPMENT[id]?.kind !== 'reactor')) return false;
+  const old = m.equipment.findIndex((e) => EQUIPMENT[e].kind === 'reactor');
+  if (old >= 0) s.inventory.push(...m.equipment.splice(old, 1));
+  if (id) {
+    s.inventory.splice(s.inventory.indexOf(id), 1);
+    m.equipment.unshift(id);
+  }
+  normalizeMech(m);
+  return true;
+}
+
+/** The fitted reactor's id, or '' for none. */
+export function reactorOf(m: MechState): string {
+  return m.equipment.find((e) => EQUIPMENT[e].kind === 'reactor') ?? '';
 }
 
 /** Install owned equipment. A new reactor replaces the old one (which goes to inventory). */
@@ -341,11 +375,11 @@ export function removeEquipment(s: CareerState, m: MechState, index: number): vo
 export function install(s: CareerState, m: MechState, mountId: string, weaponId: string): boolean {
   const mount = CHASSIS[m.chassis].mounts.find((x) => x.id === mountId);
   const idx = s.inventory.indexOf(weaponId);
-  if (!mount || idx < 0 || WEAPONS[weaponId].family !== mount.type) return false;
+  if (!mount || idx < 0 || !WEAPONS[weaponId] || !fitsMount(WEAPONS[weaponId], mount)) return false;
   uninstall(s, m, mountId);
   s.inventory.splice(s.inventory.indexOf(weaponId), 1);
   // New weapons default to group 1 for ballistics, 2 for energy and missiles.
-  m.weapons.push({ mount: mountId, weapon: weaponId, group: mount.type === 'ballistic' ? 1 : 2 });
+  m.weapons.push({ mount: mountId, weapon: weaponId, group: WEAPONS[weaponId].family === 'ballistic' ? 1 : 2 });
   return true;
 }
 
@@ -391,18 +425,24 @@ function makeContract(s: CareerState): Contract {
   const tier = pickTier();
   const t = ECONOMY.tiers[tier];
   const pick = <T>(xs: readonly T[]) => xs[Math.floor(Math.random() * xs.length)];
-  const employer = pick(EMPLOYERS);
-  const enemy = pick(ENEMY_FORCES);
+  // Factions that consider you hostile won't hire you (unless all of them do).
+  const willing = FACTION_ORDER.filter((f) => !isHostile(s, f));
+  const employerFaction = pick(willing.length ? willing : FACTION_ORDER);
+  const enemyFaction = pick(FACTION_ORDER.filter((f) => f !== employerFaction));
+  const employer = pick(FACTIONS[employerFaction].employers);
+  const enemy = pick(FACTIONS[enemyFaction].forces);
   const limited = Math.random() < ECONOMY.tonnageLimitChance;
   const maxTonnage = limited ? pick(ECONOMY.tonnageLimits) : undefined;
   const base = (t.payout[0] + Math.random() * (t.payout[1] - t.payout[0])) * econ(s).payouts;
-  const forces = rollForces(tier);
+  const forces = rollForces(tier, enemyFaction);
   const bonus = (limited ? ECONOMY.tonnageLimitPayBonus : 0) + forces.enemyMechs.length * ECONOMY.enemyMechPayBonus;
   const payout = Math.round((base * (1 + bonus)) / 500) * 500;
   return {
     id: s.nextContractId++,
     seed: randomSeed(),
     tier,
+    employerFaction,
+    enemyFaction,
     employer,
     enemy,
     flavor: pick(CONTRACT_FLAVOR).replace('{employer}', employer).replace('{enemy}', enemy),
@@ -414,17 +454,103 @@ function makeContract(s: CareerState): Contract {
   };
 }
 
-/** Enemy mechs and drone flights for a contract of this tier (data/missions.ts). */
-function rollForces(tier: 1 | 2 | 3): { enemyMechs: string[]; droneFlights: number } {
+/**
+ * Enemy mechs and drone flights for a contract: counts by tier (data/missions.ts), mech
+ * types and extras from the enemy faction's army style (data/factions.ts).
+ */
+function rollForces(tier: 1 | 2 | 3, enemy?: FactionId): { enemyMechs: string[]; droneFlights: number } {
   const f = DESTROY_TARGETS.forces[tier];
+  const army = enemy ? FACTIONS[enemy].army : null;
+  const types = army ? army.mechTypes[tier] : f.mechTypes;
   const int = (r: [number, number]) => r[0] + Math.floor(Math.random() * (r[1] - r[0] + 1));
   const enemyMechs: string[] = [];
-  for (let n = int(f.mechs); n > 0; n--) {
-    let r = Math.random() * f.mechTypes.reduce((t, m) => t + m.weight, 0);
-    const pick = f.mechTypes.find((m) => (r -= m.weight) <= 0) ?? f.mechTypes[0];
+  for (let n = Math.max(0, int(f.mechs) + (army?.extraMechs ?? 0)); n > 0; n--) {
+    let r = Math.random() * types.reduce((t, m) => t + m.weight, 0);
+    const pick = types.find((m) => (r -= m.weight) <= 0) ?? types[0];
     enemyMechs.push(pick.type);
   }
-  return { enemyMechs, droneFlights: int(f.droneFlights) };
+  return { enemyMechs, droneFlights: Math.max(0, int(f.droneFlights) + (army?.extraDroneFlights ?? 0)) };
+}
+
+// ---------- Factions and reputation ----------
+
+export function reputation(s: CareerState, f: FactionId): number {
+  return s.reputation?.[f] ?? 0;
+}
+
+export function isHostile(s: CareerState, f: FactionId): boolean {
+  return reputation(s, f) <= REPUTATION.hostileAt;
+}
+
+/** Reputation level name (Hostile, Neutral, Friendly, Trusted, Allied). */
+export function standing(rep: number): string {
+  let name = REPUTATION.levels[0].name;
+  for (const l of REPUTATION.levels) if (rep >= l.min) name = l.name;
+  return name;
+}
+
+/** Change a faction's opinion of you; returns the change actually applied. */
+function adjustRep(s: CareerState, f: FactionId, delta: number): number {
+  const before = reputation(s, f);
+  const after = Math.max(REPUTATION.min, Math.min(REPUTATION.max, before + delta));
+  s.reputation[f] = after;
+  return after - before;
+}
+
+/** What winning or losing a contract does to your standing with both sides. */
+export function reputationPreview(k: Contract): { win: [FactionId, number][]; lose: [FactionId, number][] } {
+  if (!k.employerFaction || !k.enemyFaction) return { win: [], lose: [] };
+  return {
+    win: [
+      [k.employerFaction, REPUTATION.win[k.tier]],
+      [k.enemyFaction, REPUTATION.fought[k.tier]],
+    ],
+    lose: [
+      [k.employerFaction, REPUTATION.failed],
+      [k.enemyFaction, REPUTATION.fought[k.tier]],
+    ],
+  };
+}
+
+/** Who sells an item: the open market, or one faction (with the reputation it needs). */
+export function itemSource(id: string): { open: true } | { open: false; faction: FactionId; rep: number } | null {
+  if (OPEN_MARKET.includes(id)) return { open: true };
+  for (const f of FACTION_ORDER) {
+    const e = FACTIONS[f].shop.find((x) => x.item === id);
+    if (e) return { open: false, faction: f, rep: e.rep };
+  }
+  return null;
+}
+
+/** Can you buy this now? `reason` says why not (for the shop). */
+export function shopStatus(s: CareerState, id: string): { available: boolean; reason?: string } {
+  const src = itemSource(id);
+  if (!src) return { available: false, reason: 'Not for sale' };
+  if (src.open) return { available: true };
+  const f = FACTIONS[src.faction];
+  if (isHostile(s, src.faction)) return { available: false, reason: `${f.name} won't deal with you` };
+  if (reputation(s, src.faction) < src.rep) return { available: false, reason: `Needs ${f.name} standing ${src.rep}+` };
+  return { available: true };
+}
+
+/** Freestars friends get open-market gear cheaper. */
+export function openMarketDiscount(s: CareerState): number {
+  let best = 0;
+  for (const f of FACTION_ORDER) {
+    if (isHostile(s, f)) continue;
+    for (const d of FACTIONS[f].discounts ?? []) if (reputation(s, f) >= d.rep) best = Math.max(best, d.fraction);
+  }
+  return best;
+}
+
+function shopPrice(s: CareerState, id: string, base: number): number {
+  const discount = itemSource(id)?.open ? openMarketDiscount(s) : 0;
+  return price(s, base * (1 - discount));
+}
+
+/** Shop price of a weapon or piece of equipment (after economy difficulty and discounts). */
+export function itemShopPrice(s: CareerState, id: string): number {
+  return shopPrice(s, id, itemPrice(id));
 }
 
 /** Short description of a contract's enemy mechs and drones for the board ('' if none). */
@@ -533,19 +659,20 @@ export function deploy(s: CareerState, contractId: number, target: AmmoTarget): 
   s.activeContract = contract.id;
   const combat = COMBAT_DIFFICULTY[s.difficulty.combat];
   const copy = (m: MechState) => JSON.parse(JSON.stringify(m)) as MechState;
-  const mk = ECONOMY.field.markup * econ(s).costs;
+  const repairMk = ECONOMY.field.repairMarkup * econ(s).costs;
+  const ammoMk = ECONOMY.field.ammoMarkup * econ(s).costs;
   return {
     contract,
     mech: copy(a),
     backups: bs.map(copy),
     funds: s.money,
     fieldPrices: {
-      repairPerArmor: ECONOMY.repairPerArmor * mk,
-      ammoBallistic: ECONOMY.ammoPrice.ballistic * mk,
-      ammoMissile: ECONOMY.ammoPrice.missile * mk,
+      repairPerArmor: ECONOMY.repairPerArmor * repairMk,
+      ammoBallistic: ECONOMY.ammoPrice.ballistic * ammoMk,
+      ammoMissile: ECONOMY.ammoPrice.missile * ammoMk,
       swapFee: price(s, ECONOMY.field.swapFee),
     },
-    enemyCount: combat.enemyCount * ECONOMY.tiers[contract.tier].enemyCount,
+    enemyCount: combat.enemyCount * ECONOMY.tiers[contract.tier].enemyCount * (contract.enemyFaction ? FACTIONS[contract.enemyFaction].army.enemyCount : 1),
     enemySpread: combat.enemySpread,
     enemyDamage: combat.enemyDamage,
   };
@@ -580,6 +707,13 @@ export function completeMission(s: CareerState, contract: Contract, outcome: Mis
     spend(s, f.amount);
     lines.push({ label: f.label, amount: -f.amount });
   }
+  // Reputation: the employer likes a job done, the side you fought remembers it.
+  const rep: Debrief['reputation'] = [];
+  const preview = reputationPreview(contract);
+  for (const [f, delta] of outcome.won ? preview.win : preview.lose) {
+    const applied = adjustRep(s, f, delta);
+    rep.push({ faction: f, delta: applied, after: reputation(s, f) });
+  }
   const lost = outcome.mechs.filter((m) => m.destroyed);
   if (lost.length > 0) {
     notes.push(`Destroyed: ${lost.map((m) => mechName(s, m)).join(', ')}. Rebuild in the Mech tab, or field another mech.`);
@@ -606,7 +740,7 @@ export function completeMission(s: CareerState, contract: Contract, outcome: Mis
 
   refreshContracts(s);
   if (!s.over) checkCareerOver(s);
-  return { outcome, contract, lines, net: s.money - before, moneyAfter: s.money, notes };
+  return { outcome, contract, lines, reputation: rep, net: s.money - before, moneyAfter: s.money, notes };
 }
 
 /** Sell spare gear (cheapest first) until `needed` is covered. */

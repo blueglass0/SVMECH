@@ -4,10 +4,9 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 
 ## Current milestone
 
-**Milestone 8 (both parts) — weapons, drones and enemy mechs: built, awaiting the user's
-playtest** (the user is testing parts 1 and 2 together). M1–M7 signed off. Next by plan: 9
-(factions). Open: the user wants ideas on weapon convergence (wide mounts miss small targets
-dead ahead) before anything changes; see the M8 part 2 notes.
+**Milestone 9 — Factions: built, awaiting the user's playtest**, together with the sized-mount
+rework done after M8 (the user merges and tests both at once). M1–M8 played; M8 feedback applied.
+Next by plan: 10 (more mission types: defend, escort, convoy raid, mech hunt; also bigger maps).
 Deferred by the user: line-of-sight shadow rendering (logic already hides enemies behind
 walls); revisit as a graphics option, likely in M11.
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
@@ -23,11 +22,19 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   belong with M7 (multiple chassis, interact action). See `docs/PLAN.md`.
 - **One backup per mission** (user decision after M7 part 1): `ECONOMY.maxBackups = 1`; choosing
   another backup replaces the current one.
-- **Field services are expensive on purpose** (after M7 part 2): 3× hangar prices and a ¢16k swap
-  fee, so spending mid-mission is a real trade-off against the payout. Tune from there.
+- **Field services are expensive on purpose** (after M7 part 2): ammo 3× hangar prices, repairs
+  2× (lowered after M8: heavy mechs cost too much to patch), ¢16k swap fee, so spending
+  mid-mission is a real trade-off against the payout. Tune from there.
+- **Less ballistic ammo** (after M8): chassis ballistic capacity cut ~15% (Vulture 1150) so heavy
+  gun builds have a reason to fit ammo bins.
 - **Map sizes** (requested after M7 part 2): some maps should be bigger. Planned with mission
   types (M10); watch performance (nav grid and obstacle count grow with area).
 - Weapons don't need to knock buildings down faster; heavier weapons (heavy cannon, plasma) do it.
+- **Weapons keep fixed, parallel aim** (user decision after M8; no convergence). Instead: medium and
+  heavy enemy mechs are a little bigger than the player's version (`EnemyMechDef.sizeScale`
+  1.1–1.15, hardpoints scale too), Condor and Roc arm mounts were narrowed (Roc ±24–34, Condor
+  ±21–27), and bigger tanks/turrets may come later. Players can put guns on one arm to control
+  where shots come from.
 - **Chassis feel:** heavier chassis get lower turn rates and more momentum (lower accel/decel),
   lights turn and accelerate quicker. The movement numbers in `chassis.ts` are enough to make
   chassis feel distinct (user-approved, M2).
@@ -235,7 +242,7 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
 - Interact: F on PC (`actions.interact`); on phones a USE button appears next to the right stick
   only while standing on a station (`touchButtons.interact.visible`). HUD prompt shows the offer
   and price; cyan edge arrows point to unused stations.
-- Services are one use per station, priced at `ECONOMY.field.markup` (3×) hangar prices, paid
+- Services are one use per station, priced at `ECONOMY.field.repairMarkup` (2×) / `ammoMarkup` (3×) hangar prices, paid
   from the money you had at deploy (`MissionConfig.funds`, `fieldPrices`); spending comes back in
   `MissionOutcome.fieldCosts` and shows as debrief lines. Ammo: full refill. Repair: restores
   every section that isn't destroyed. Swap (fee 16k): the current mech is airlifted home as it is
@@ -255,8 +262,7 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   chains, splash and most stream frames don't count as hits (`onUnitHit(..., counts)`).
 - Pools: beams 24 (pulses, arcs, PD tracers), streams 12 (shown only on frames they fire).
   Measured ~0.4–0.5 ms/frame logic with Gatling, heavy cannon, beam, lightning and plasma firing.
-- Weapons still fire parallel from their hardpoints. Wide mounts (Roc arms at ±40) can pass
-  either side of a small target dead ahead; revisit if it bothers the user.
+- Weapons still fire parallel from their hardpoints (kept on purpose, see decisions).
 
 ## Drone and enemy mech notes (M8 part 2)
 
@@ -282,6 +288,47 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   flights (2–3 drones) between; `MissionMap.units`. Old boards are refreshed on load.
 - Enemy beams/pulses/streams use red textures (`*-enemy`). Dev: Spawn drones, Spawn enemy mech
   (cycles types). Measured logic ~0.5–0.9 ms/frame with ~45 enemies (2 mechs, 11 drones) converging.
+
+## Sized mount notes (after M8)
+
+- Mounts (`MountDef`) have `kind` ('direct': arms/torso, guns and lasers; 'back': missiles, later
+  artillery) and `size` (small/medium/large); a weapon fits if `slot` matches and its `size` is no
+  bigger (`fitsMount` in `mechStats.ts`, `SIZE_RANK`). Weapon `family` only decides ammo, heat
+  style and colours now. Mount ids are kept from the old layout so saves line up; on load, weapons
+  that no longer fit go to inventory with a hangar note (`loadNotes`).
+- Sizes: small MG, small laser, pulse laser, rocket pod (back); medium AC, Gatling, laser, beam,
+  plasma, lightning, missile pack (back); large heavy cannon, large laser, heavy beam, missile rack
+  (new, back, 8 seekers, range 800). Heavy weapons mostly sit on heavy frames.
+- Power = `ChassisDef.power` (frame, 5–9; energy-leaning frames higher) + reactor output (light 7,
+  standard 10, heavy 16, assault 23). The reactor has its own row in the loadout (`setReactor`,
+  `reactorOf`), uses no internal slots, and is optional. Internal slots cut to match (Kestrel 4,
+  Shrike 4, Vulture 6, Condor 8, Roc 9). Reactors are still stored in `MechState.equipment`.
+- Shrike (light 35 t, ¢290k): one large torso mount on the centre line, nothing else; stock large
+  laser. The user's "glass cannon" idea.
+
+## Faction notes (M9)
+
+- `src/data/factions.ts`: Royalists (red), Technocrats (blue), Freestars (dirt brown). Each has
+  employers and enemy force names, a gated shop (`shop: { item, rep }`), optional open-market
+  discounts (Freestars 10% at 20, 20% at 50), and an `army` style (count multiplier, tank and
+  turret mix, enemy mech types per tier, extra mechs/drone flights, colour `skin`).
+- `OPEN_MARKET` items (Kestrel, Vulture, basic weapons and equipment) sell to anyone; everything
+  else belongs to one faction. `shopStatus`/`itemShopPrice`/`itemSource` in career.ts; the Shop
+  lists everything with a faction chip and the standing needed. Condor needs Royalists 20, Roc 55,
+  Shrike Freestars 20, top energy gear Technocrats 30–65: higher-end gear is a goal.
+- Reputation (`CareerState.reputation`, -100..100, `REPUTATION`): a win gives the employer
+  +6/9/13 by tier; the faction you fought loses 4/6/9 win or lose; failing costs the employer 3.
+  At -30 or below a faction won't hire you or sell to you. Levels: Hostile, Neutral (-29),
+  Friendly (20), Trusted (50), Allied (80). Shown in the Factions tab, deploy panel (preview) and
+  debrief. Old saves start neutral and get a fresh board.
+- Contracts have `employerFaction` and `enemyFaction`; the enemy army decides tank/turret types
+  (`MissionForces.tankTypes/turretTypes`), mech types (`rollForces`), count multiplier
+  (`MissionConfig.enemyCount`) and unit colours (`createEnemy(..., skin)`; art bakes every enemy
+  texture per skin in `ARMY_PALETTES`, mech parts per skin too).
+- New units: heavy tank (Royalists, 280 HP, radius 34, big splash cannon), laser tank and laser
+  turret (Technocrats, hitscan beams), technical (Freestars, fast pickup with a gun), and enemy
+  mechs lancer (Vulture, lasers), warden (Condor, large laser + shield), skirmisher (Shrike,
+  heavy cannon). `EnemyDef.art` names a unit's textures.
 
 ## Conventions
 

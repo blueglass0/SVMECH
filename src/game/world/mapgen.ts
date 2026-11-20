@@ -19,6 +19,9 @@ export interface MissionForces {
   /** Enemy mech types (EnemyDef ids), one entry per mech. */
   mechs: readonly string[];
   droneFlights: number;
+  /** The enemy army's tank and turret mix (milestone 9); defaults to the faction-neutral army. */
+  tankTypes?: readonly { type: string; weight: number }[];
+  turretTypes?: readonly string[];
 }
 
 export interface MissionMap {
@@ -215,13 +218,14 @@ export function generateDestroyTargets(
   const turrets: Placement[] = [];
   const tanks: Placement[] = [];
   const turretCount = Math.max(1, Math.round(T.turretsPerTarget * difficulty.enemyCount));
+  const turretTypes = forces.turretTypes ?? T.turretTypes;
   for (const s of sites) {
     targets.push({ type: T.target, x: s.x, y: s.y, angle: 0 });
     const a0 = rng.range(0, Math.PI * 2);
     for (let i = 0; i < turretCount; i++) {
       const a = a0 + (i / turretCount) * Math.PI * 2;
       turrets.push({
-        type: T.turretTypes[i % T.turretTypes.length],
+        type: turretTypes[i % turretTypes.length],
         x: s.x + Math.cos(a) * 150,
         y: s.y + Math.sin(a) * 150,
         angle: angleTo(s, spawn),
@@ -248,7 +252,8 @@ export function generateDestroyTargets(
     }
     return false;
   };
-  const placeTank = (near: Vec, spread: number, home: Vec) => placeUnit(tanks, () => pickWeighted(rng, T.tankTypes), near, spread, home);
+  const tankTypes = forces.tankTypes ?? T.tankTypes;
+  const placeTank = (near: Vec, spread: number, home: Vec) => placeUnit(tanks, () => pickWeighted(rng, tankTypes), near, spread, home);
   const guards = Math.round(T.tanksPerTarget * difficulty.enemyCount);
   for (const s of sites) for (let i = 0; i < guards; i++) placeTank(s, 380, s);
   const roamers = Math.round(rng.int(T.roamingTanks[0], T.roamingTanks[1]) * difficulty.enemyCount);

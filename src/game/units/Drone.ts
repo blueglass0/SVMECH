@@ -34,13 +34,14 @@ export class Drone extends Gunner {
     y: number,
     angle: number,
     private home: Vec,
+    skin = '',
   ) {
     super(scene, def, x, y, angle);
     this.flying = true;
     this.orbitRange = (def.orbitRange ?? 250) * (0.8 + Math.random() * 0.4);
     this.wander = { x, y };
     this.shadow = scene.add.image(x + SHADOW_X, y + SHADOW_Y, 'drone-shadow').setScale(1 / ART_SCALE).setDepth(3);
-    this.img = scene.add.image(x, y, 'drone').setScale(1 / ART_SCALE).setDepth(9.5).setRotation(angle);
+    this.img = scene.add.image(x, y, 'drone' + skin).setScale(1 / ART_SCALE).setDepth(9.5).setRotation(angle);
   }
 
   update(dt: number, ctx: AiContext): void {
