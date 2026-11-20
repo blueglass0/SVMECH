@@ -23,8 +23,11 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   belong with M7 (multiple chassis, interact action). See `docs/PLAN.md`.
 - **One backup per mission** (user decision after M7 part 1): `ECONOMY.maxBackups = 1`; choosing
   another backup replaces the current one.
-- **Field services are expensive on purpose** (after M7 part 2): 3× hangar prices and a ¢16k swap
-  fee, so spending mid-mission is a real trade-off against the payout. Tune from there.
+- **Field services are expensive on purpose** (after M7 part 2): ammo 3× hangar prices, repairs
+  2× (lowered after M8: heavy mechs cost too much to patch), ¢16k swap fee, so spending
+  mid-mission is a real trade-off against the payout. Tune from there.
+- **Less ballistic ammo** (after M8): chassis ballistic capacity cut ~15% (Vulture 1150) so heavy
+  gun builds have a reason to fit ammo bins.
 - **Map sizes** (requested after M7 part 2): some maps should be bigger. Planned with mission
   types (M10); watch performance (nav grid and obstacle count grow with area).
 - Weapons don't need to knock buildings down faster; heavier weapons (heavy cannon, plasma) do it.
@@ -235,7 +238,7 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
 - Interact: F on PC (`actions.interact`); on phones a USE button appears next to the right stick
   only while standing on a station (`touchButtons.interact.visible`). HUD prompt shows the offer
   and price; cyan edge arrows point to unused stations.
-- Services are one use per station, priced at `ECONOMY.field.markup` (3×) hangar prices, paid
+- Services are one use per station, priced at `ECONOMY.field.repairMarkup` (2×) / `ammoMarkup` (3×) hangar prices, paid
   from the money you had at deploy (`MissionConfig.funds`, `fieldPrices`); spending comes back in
   `MissionOutcome.fieldCosts` and shows as debrief lines. Ammo: full refill. Repair: restores
   every section that isn't destroyed. Swap (fee 16k): the current mech is airlifted home as it is

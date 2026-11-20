@@ -174,7 +174,7 @@ This is a new game project. Read docs/PLAN.md: it's the full design and build pl
 - Phone weapon groups: the right stick fires the selected group; a button next to it switches between group 1 and 2. A smoother phone solution is still wanted later.
 - Aim assist on phones stays light.
 - One backup mech per mission: a single extra chance (after M7).
-- Field stations (ammo, repair, swap) are single-use per station; field repair can't fix destroyed sections. They cost 3× hangar prices (swap fee ¢16k) so spending mid-mission is a real trade-off against the payout (raised from 1.5× after M7).
+- Field stations (ammo, repair, swap) are single-use per station; field repair can't fix destroyed sections. Ammo costs 3× hangar prices and repairs 2× (swap fee ¢16k), so spending mid-mission is a real trade-off against the payout (raised from 1.5× after M7; repairs eased to 2× after M8).
 - Current weapons don't need to destroy buildings faster; heavier weapons (heavy cannon, plasma) are the building-wreckers.
 
 ## Open questions

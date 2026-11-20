@@ -102,7 +102,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
     sections: { torso: 380, leftArm: 150, rightArm: 150, legs: 180 },
     heatCapacity: 100,
     heatDissipation: 6,
-    ammoCapacity: { ballistic: 1350, missile: 24 },
+    ammoCapacity: { ballistic: 1150, missile: 24 },
     mounts: [
       { id: 'la-b', section: 'leftArm', type: 'ballistic', x: 30, y: -21 },
       { id: 'la-e', section: 'leftArm', type: 'energy', x: 24, y: -27 },
@@ -145,7 +145,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
     sections: { torso: 230, leftArm: 90, rightArm: 90, legs: 120 },
     heatCapacity: 80,
     heatDissipation: 5,
-    ammoCapacity: { ballistic: 900, missile: 0 },
+    ammoCapacity: { ballistic: 780, missile: 0 },
     mounts: [
       { id: 'la-e', section: 'leftArm', type: 'energy', x: 22, y: -18 },
       { id: 'ra-b', section: 'rightArm', type: 'ballistic', x: 24, y: 17 },
@@ -186,7 +186,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
     sections: { torso: 520, leftArm: 210, rightArm: 210, legs: 260 },
     heatCapacity: 120,
     heatDissipation: 7,
-    ammoCapacity: { ballistic: 1800, missile: 36 },
+    ammoCapacity: { ballistic: 1530, missile: 36 },
     mounts: [
       { id: 'la-b', section: 'leftArm', type: 'ballistic', x: 36, y: -25 },
       { id: 'la-e', section: 'leftArm', type: 'energy', x: 29, y: -32 },
@@ -231,7 +231,7 @@ export const CHASSIS: Record<string, ChassisDef> = {
     sections: { torso: 700, leftArm: 280, rightArm: 280, legs: 340 },
     heatCapacity: 140,
     heatDissipation: 8,
-    ammoCapacity: { ballistic: 2250, missile: 48 },
+    ammoCapacity: { ballistic: 1900, missile: 48 },
     mounts: [
       { id: 'la-b', section: 'leftArm', type: 'ballistic', x: 42, y: -29 },
       { id: 'la-b2', section: 'leftArm', type: 'ballistic', x: 38, y: -36 },

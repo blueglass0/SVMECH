@@ -533,16 +533,17 @@ export function deploy(s: CareerState, contractId: number, target: AmmoTarget): 
   s.activeContract = contract.id;
   const combat = COMBAT_DIFFICULTY[s.difficulty.combat];
   const copy = (m: MechState) => JSON.parse(JSON.stringify(m)) as MechState;
-  const mk = ECONOMY.field.markup * econ(s).costs;
+  const repairMk = ECONOMY.field.repairMarkup * econ(s).costs;
+  const ammoMk = ECONOMY.field.ammoMarkup * econ(s).costs;
   return {
     contract,
     mech: copy(a),
     backups: bs.map(copy),
     funds: s.money,
     fieldPrices: {
-      repairPerArmor: ECONOMY.repairPerArmor * mk,
-      ammoBallistic: ECONOMY.ammoPrice.ballistic * mk,
-      ammoMissile: ECONOMY.ammoPrice.missile * mk,
+      repairPerArmor: ECONOMY.repairPerArmor * repairMk,
+      ammoBallistic: ECONOMY.ammoPrice.ballistic * ammoMk,
+      ammoMissile: ECONOMY.ammoPrice.missile * ammoMk,
       swapFee: price(s, ECONOMY.field.swapFee),
     },
     enemyCount: combat.enemyCount * ECONOMY.tiers[contract.tier].enemyCount,

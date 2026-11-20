@@ -32,8 +32,9 @@ export const ECONOMY = {
   enemyMechPayBonus: 0.12,
   /** Field stations (ammo depot, repair bay, swap station) on some maps. */
   field: {
-    /** Field services cost this many times the hangar price. */
-    markup: 3,
+    /** Field services cost this many times the hangar price: repairs and ammo separately. */
+    repairMarkup: 2,
+    ammoMarkup: 3,
     /** Paying the cargo crew to swap your mech for the backup. */
     swapFee: 16000,
     /** How many stations a map gets, and the chance each one is a swap station. */
