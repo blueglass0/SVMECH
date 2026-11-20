@@ -48,8 +48,8 @@ export interface PilotInput {
 /** Options for mechs that aren't the player's (enemy mechs). */
 export interface MechOptions {
   team: Team;
-  /** Enemy colours instead of the player's. */
-  skin: '' | '-enemy';
+  /** Texture set: '' (the player's), '-enemy', or an army colour ('-royal', '-tech', '-free'). */
+  skin: string;
   /** Multiplies every section's armor. */
   armorScale: number;
   /** Multiply weapon damage and spread (combat difficulty, enemy tuning). */

@@ -33,12 +33,15 @@ export class Tank extends Gunner {
     y: number,
     angle: number,
     private home: Vec,
+    skin = '',
   ) {
     super(scene, def, x, y, angle);
     this.hullAngle = angle;
-    this.hull = scene.add.image(x, y, 'tank-hull').setScale(1 / ART_SCALE).setDepth(4);
-    this.gun = scene.add.image(x, y, 'tank-turret').setScale(1 / ART_SCALE).setDepth(5);
+    this.body = def.art?.body ?? 'tank-hull';
+    this.hull = scene.add.image(x, y, this.body + skin).setScale(1 / ART_SCALE).setDepth(4);
+    this.gun = scene.add.image(x, y, (def.art?.gun ?? 'tank-turret') + skin).setScale(1 / ART_SCALE).setDepth(5);
   }
+  private body: string;
 
   update(dt: number, ctx: AiContext): void {
     if (!this.alive) return;
@@ -128,7 +131,7 @@ export class Tank extends Gunner {
   }
 
   protected onDestroyed(fx: Effects): void {
-    this.hull.setTexture('tank-hull-wreck').setDepth(2);
+    this.hull.setTexture(this.body + '-wreck').setDepth(2);
     this.gun.setVisible(false);
     fx.explosion(this.x, this.y, 1);
   }
@@ -139,12 +142,12 @@ export class Turret extends Gunner {
   private gun: Phaser.GameObjects.Image;
   private idleAngle: number;
 
-  constructor(scene: Phaser.Scene, def: EnemyDef, x: number, y: number, angle: number) {
+  constructor(scene: Phaser.Scene, def: EnemyDef, x: number, y: number, angle: number, skin = '') {
     super(scene, def, x, y, angle);
     this.idleAngle = angle;
-    this.base = scene.add.image(x, y, 'turret-base').setScale(1 / ART_SCALE).setDepth(4);
-    const tex = def.weapon === 'turretCannon' ? 'turret-cannon' : 'turret-gun';
-    this.gun = scene.add.image(x, y, tex).setScale(1 / ART_SCALE).setDepth(5).setRotation(angle);
+    this.base = scene.add.image(x, y, 'turret-base' + skin).setScale(1 / ART_SCALE).setDepth(4);
+    const tex = def.art?.gun ?? (def.weapon === 'turretCannon' ? 'turret-cannon' : 'turret-gun');
+    this.gun = scene.add.image(x, y, tex + skin).setScale(1 / ART_SCALE).setDepth(5).setRotation(angle);
   }
 
   update(dt: number, ctx: AiContext): void {
@@ -194,18 +197,19 @@ export class Structure extends Enemy {
   }
 }
 
-export function createEnemy(scene: Phaser.Scene, type: string, x: number, y: number, angle: number, home?: Vec): Enemy {
+/** `skin`: the enemy army's colour suffix ('' neutral, '-royal', '-tech', '-free'; see art.ts). */
+export function createEnemy(scene: Phaser.Scene, type: string, x: number, y: number, angle: number, home?: Vec, skin = ''): Enemy {
   const def = ENEMIES[type];
   switch (def.kind) {
     case 'tank':
-      return new Tank(scene, def, x, y, angle, home ?? { x, y });
+      return new Tank(scene, def, x, y, angle, home ?? { x, y }, skin);
     case 'turret':
-      return new Turret(scene, def, x, y, angle);
+      return new Turret(scene, def, x, y, angle, skin);
     case 'structure':
       return new Structure(scene, def, x, y);
     case 'drone':
-      return new Drone(scene, def, x, y, angle, home ?? { x, y });
+      return new Drone(scene, def, x, y, angle, home ?? { x, y }, skin);
     case 'mech':
-      return new EnemyMech(scene, def, x, y, angle, home ?? { x, y });
+      return new EnemyMech(scene, def, x, y, angle, home ?? { x, y }, skin);
   }
 }

@@ -4,12 +4,9 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 
 ## Current milestone
 
-**Milestone 8 (both parts) — weapons, drones and enemy mechs: built, awaiting the user's
-playtest** (the user is testing parts 1 and 2 together). M1–M7 signed off. Next by plan: 9
-(factions). Open: the user wants ideas on weapon convergence (wide mounts miss small targets
-dead ahead): decided, see below. Sized mounts (small/medium/large, direct and back), frame
-power + reactor, and the Shrike glass cannon: built after M8 at the user's request (see notes).
-The user asked to go straight on to M9 (factions) after that.
+**Milestone 9 — Factions: built, awaiting the user's playtest**, together with the sized-mount
+rework done after M8 (the user merges and tests both at once). M1–M8 played; M8 feedback applied.
+Next by plan: 10 (more mission types: defend, escort, convoy raid, mech hunt; also bigger maps).
 Deferred by the user: line-of-sight shadow rendering (logic already hides enemies behind
 walls); revisit as a graphics option, likely in M11.
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
@@ -308,6 +305,30 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   Shrike 4, Vulture 6, Condor 8, Roc 9). Reactors are still stored in `MechState.equipment`.
 - Shrike (light 35 t, ¢290k): one large torso mount on the centre line, nothing else; stock large
   laser. The user's "glass cannon" idea.
+
+## Faction notes (M9)
+
+- `src/data/factions.ts`: Royalists (red), Technocrats (blue), Freestars (dirt brown). Each has
+  employers and enemy force names, a gated shop (`shop: { item, rep }`), optional open-market
+  discounts (Freestars 10% at 20, 20% at 50), and an `army` style (count multiplier, tank and
+  turret mix, enemy mech types per tier, extra mechs/drone flights, colour `skin`).
+- `OPEN_MARKET` items (Kestrel, Vulture, basic weapons and equipment) sell to anyone; everything
+  else belongs to one faction. `shopStatus`/`itemShopPrice`/`itemSource` in career.ts; the Shop
+  lists everything with a faction chip and the standing needed. Condor needs Royalists 20, Roc 55,
+  Shrike Freestars 20, top energy gear Technocrats 30–65: higher-end gear is a goal.
+- Reputation (`CareerState.reputation`, -100..100, `REPUTATION`): a win gives the employer
+  +6/9/13 by tier; the faction you fought loses 4/6/9 win or lose; failing costs the employer 3.
+  At -30 or below a faction won't hire you or sell to you. Levels: Hostile, Neutral (-29),
+  Friendly (20), Trusted (50), Allied (80). Shown in the Factions tab, deploy panel (preview) and
+  debrief. Old saves start neutral and get a fresh board.
+- Contracts have `employerFaction` and `enemyFaction`; the enemy army decides tank/turret types
+  (`MissionForces.tankTypes/turretTypes`), mech types (`rollForces`), count multiplier
+  (`MissionConfig.enemyCount`) and unit colours (`createEnemy(..., skin)`; art bakes every enemy
+  texture per skin in `ARMY_PALETTES`, mech parts per skin too).
+- New units: heavy tank (Royalists, 280 HP, radius 34, big splash cannon), laser tank and laser
+  turret (Technocrats, hitscan beams), technical (Freestars, fast pickup with a gun), and enemy
+  mechs lancer (Vulture, lasers), warden (Condor, large laser + shield), skirmisher (Shrike,
+  heavy cannon). `EnemyDef.art` names a unit's textures.
 
 ## Conventions
 

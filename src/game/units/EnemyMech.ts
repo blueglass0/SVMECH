@@ -55,6 +55,7 @@ export class EnemyMech extends Enemy {
     y: number,
     angle: number,
     private home: Vec,
+    skin = '',
   ) {
     super(scene, def, x, y);
     this.m = def.mech!;
@@ -71,7 +72,7 @@ export class EnemyMech extends Enemy {
     };
     this.mech = new Mech(scene, state, { ...chassis.movement }, x, y, angle, {
       team: 'enemy',
-      skin: '-enemy',
+      skin: skin || '-enemy',
       armorScale: this.m.armorScale,
       markers: false,
       sizeScale: this.m.sizeScale ?? 1,

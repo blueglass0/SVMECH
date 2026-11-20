@@ -512,3 +512,15 @@ body.in-mission .toolbar .mission-only {
 .chip.size-large {
   color: #ff9a8a;
 }
+.shop-row.locked b {
+  color: var(--muted);
+}
+.shop-note {
+  margin: 0 0 10px;
+}
+.chip.faction-chip {
+  background: #1c2329;
+}
+.bar.rep {
+  background: linear-gradient(90deg, #3a2224 0 35%, #2a3138 35% 100%);
+}

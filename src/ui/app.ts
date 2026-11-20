@@ -3,9 +3,10 @@ import * as C from '../career/career';
 import type { CareerState, CombatLevel, Contract, Debrief, MissionOutcome } from '../career/types';
 import { CHASSIS, CHASSIS_ORDER, type MountDef, type MountKind, type Section } from '../data/chassis';
 import { ECONOMY, SHOP_STOCK } from '../data/economy';
+import { FACTIONS, FACTION_ORDER, REPUTATION, type FactionId } from '../data/factions';
 import { WEAPONS, type WeaponDef } from '../data/weapons';
 import { EQUIPMENT, type EquipmentDef } from '../data/equipment';
-import { isEquipment, isWeapon, itemName, itemPrice } from '../data/items';
+import { isEquipment, isWeapon, itemName } from '../data/items';
 import { fitsMount, mechStats } from '../game/mechStats';
 import { SECTIONS } from '../game/units/SectionDamage';
 import { play } from '../core/audio';
@@ -13,7 +14,7 @@ import { settings, saveSettings } from '../core/settings';
 import { clockTime, h, money, signedMoney } from './h';
 import type { MapScene } from '../scenes/MapScene';
 
-type Tab = 'contracts' | 'mech' | 'shop' | 'finance';
+type Tab = 'contracts' | 'mech' | 'shop' | 'factions' | 'finance';
 
 const SECTION_NAMES: Record<Section, string> = { torso: 'Torso', leftArm: 'Left arm', rightArm: 'Right arm', legs: 'Legs' };
 const LEVELS: CombatLevel[] = ['easy', 'normal', 'hard'];
@@ -144,10 +145,19 @@ export class App {
       ['contracts', 'Contracts'],
       ['mech', c.mechs.some((m) => C.totalRepairCost(c, m) > 0 || m.destroyed) ? 'Mechs •' : 'Mechs'],
       ['shop', 'Shop'],
+      ['factions', 'Factions'],
       ['finance', 'Finance'],
     ];
     const body =
-      tab === 'contracts' ? this.contractsTab(c) : tab === 'mech' ? this.mechTab(c) : tab === 'shop' ? this.shopTab(c) : this.financeTab(c);
+      tab === 'contracts'
+        ? this.contractsTab(c)
+        : tab === 'mech'
+          ? this.mechTab(c)
+          : tab === 'shop'
+            ? this.shopTab(c)
+            : tab === 'factions'
+              ? this.factionsTab(c)
+              : this.financeTab(c);
     const flash = this.flash;
     this.flash = '';
     this.show(
@@ -196,8 +206,8 @@ export class App {
             },
           },
           h('div', { class: 'card-top' }, h('span', { class: 'tier' }, `${ECONOMY.tiers[k.tier].name}`), h('span', { class: 'pay' }, money(k.payout))),
-          h('div', { class: 'card-title' }, `${k.employer}`),
-          h('div', { class: 'muted small' }, `vs ${k.enemy} · destroy ${k.targets} uplinks`),
+          h('div', { class: 'card-title' }, `${k.employer}`, factionChip(k.employerFaction)),
+          h('div', { class: 'muted small' }, `vs ${k.enemy}`, factionChip(k.enemyFaction), ` · destroy ${k.targets} uplinks`),
           k.maxTonnage ? h('div', { class: 'small limit' }, `Tonnage limit: ${k.maxTonnage} t per mech`) : null,
           C.forcesLabel(k) ? h('div', { class: 'small threat' }, `Expect: ${C.forcesLabel(k)}`) : null,
           h('div', { class: 'small bonus' }, `Bonus +${money(C.bonusPayout(k))}: ${k.bonus.label}`),
@@ -305,6 +315,9 @@ export class App {
           row('Bonus', k.bonus.label, `+${money(C.bonusPayout(k))}`),
           k.maxTonnage ? row('Tonnage limit', 'every deployed mech', `${k.maxTonnage} t`) : null,
           C.forcesLabel(k) ? row('Intel', C.forcesLabel(k), '') : null,
+          k.employerFaction ? row('Employer', `${k.employer} (${FACTIONS[k.employerFaction].name})`, '') : null,
+          k.enemyFaction ? row('Enemy', `${k.enemy} (${FACTIONS[k.enemyFaction].name}): ${FACTIONS[k.enemyFaction].fights.toLowerCase()}`, '') : null,
+          k.employerFaction ? row('Reputation', `win: ${repText(C.reputationPreview(k).win)} · fail: ${repText(C.reputationPreview(k).lose)}`, '') : null,
         ),
       ),
       h(
@@ -554,22 +567,29 @@ export class App {
 
   private shopTab(c: CareerState): HTMLElement {
     const item = (id: string) => {
-      const cost = C.price(c, itemPrice(id));
+      const cost = C.itemShopPrice(c, id);
       const w = WEAPONS[id];
       const e = EQUIPMENT[id];
+      const status = C.shopStatus(c, id);
       return h(
         'div',
-        { class: 'shop-row' },
+        { class: `shop-row ${status.available ? '' : 'locked'}` },
         h(
           'div',
           null,
           h('b', null, itemName(id)),
+          sourceChip(id),
           w
             ? [h('span', { class: `chip ${w.family}` }, w.family), h('span', { class: `chip size-${w.size}` }, w.slot === 'back' ? `${w.size} back` : w.size)]
             : h('span', { class: 'chip' }, e.kind === 'reactor' ? 'reactor' : `${e.slots} slot${e.slots > 1 ? 's' : ''}`),
           h('div', { class: 'muted small' }, w ? weaponStats(w) : equipmentStats(e)),
+          status.reason ? h('div', { class: 'small limit' }, status.reason) : null,
         ),
-        h('button', { class: 'small-btn', disabled: cost > c.money, onclick: () => this.act(() => C.buyItem(c, id), `Bought ${itemName(id)}.`) }, `Buy ${money(cost)}`),
+        h(
+          'button',
+          { class: 'small-btn', disabled: cost > c.money || !status.available, onclick: () => this.act(() => C.buyItem(c, id), `Bought ${itemName(id)}.`) },
+          `Buy ${money(cost)}`,
+        ),
       );
     };
     const mechs = h(
@@ -579,15 +599,17 @@ export class App {
       CHASSIS_ORDER.map((id) => {
         const ch = CHASSIS[id];
         const cost = C.chassisPrice(c, id);
+        const status = C.shopStatus(c, id);
         const armor = ch.sections.torso + ch.sections.leftArm + ch.sections.rightArm + ch.sections.legs;
         return h(
           'div',
-          { class: 'shop-row' },
+          { class: `shop-row ${status.available ? '' : 'locked'}` },
           h(
             'div',
             null,
             h('b', null, ch.name),
             h('span', { class: 'chip' }, `${ch.weightClass} ${ch.tonnage} t`),
+            sourceChip(id),
             h(
               'div',
               { class: 'muted small' },
@@ -596,10 +618,11 @@ export class App {
             h('div', { class: 'muted small' }, `Mounts: ${mountSummary(ch.mounts)}`
             ),
             h('div', { class: 'muted small' }, `Comes with: ${ch.stock.weapons.map((w) => WEAPONS[w.weapon].name).join(', ')}`),
+            status.reason ? h('div', { class: 'small limit' }, status.reason) : null,
           ),
           h(
             'button',
-            { class: 'small-btn', disabled: cost > c.money, onclick: () => this.act(() => {
+            { class: 'small-btn', disabled: cost > c.money || !status.available, onclick: () => this.act(() => {
               const m = C.buyChassis(c, id);
               if (m) this.selectedMech = m.id;
             }, `Bought a ${ch.name}. It's in your hangar (Mechs tab).`) },
@@ -625,7 +648,57 @@ export class App {
             ),
           ),
     );
-    return h('div', { class: 'cols' }, mechs, weapons, equipment, sell);
+    const discount = C.openMarketDiscount(c);
+    return h(
+      'div',
+      null,
+      h(
+        'p',
+        { class: 'muted small shop-note' },
+        'Open-market gear is sold to anyone. Faction gear unlocks as that faction comes to trust you (Factions tab).',
+        discount > 0 ? ` Freestar contacts get you ${Math.round(discount * 100)}% off open-market gear.` : '',
+      ),
+      h('div', { class: 'cols' }, mechs, weapons, equipment, sell),
+    );
+  }
+
+  // ---------- Factions ----------
+
+  private factionsTab(c: CareerState): HTMLElement {
+    return h(
+      'div',
+      null,
+      h('p', { class: 'muted small shop-note' }, 'Winning a contract raises your standing with the employer; whoever you fought thinks less of you. At -30 or below a faction won\'t hire you or sell to you.'),
+      h(
+        'div',
+        { class: 'cols' },
+        FACTION_ORDER.map((id) => {
+          const f = FACTIONS[id];
+          const rep = C.reputation(c, id);
+          const pct = ((rep - REPUTATION.min) / (REPUTATION.max - REPUTATION.min)) * 100;
+          return h(
+            'div',
+            { class: 'panel faction' },
+            h('h3', { style: `color:${f.css}` }, f.name),
+            h('p', { class: 'muted small' }, f.blurb),
+            h('div', { class: 'meter' }, h('span', null, 'Standing'), h('div', { class: 'bar rep' }, h('i', { style: `width:${pct}%;background:${f.css}` })), h('span', { class: 'num' }, `${rep > 0 ? '+' : ''}${rep} ${C.standing(rep)}`)),
+            h('div', { class: 'rows small' }, row('Fights with', f.fights, ''), row('Sells', f.sells, '')),
+            h(
+              'div',
+              { class: 'rows small' },
+              f.shop.map((e) =>
+                row(
+                  CHASSIS[e.item]?.name ?? itemName(e.item),
+                  rep >= e.rep && !C.isHostile(c, id) ? 'available' : `at ${e.rep}+`,
+                  rep >= e.rep && !C.isHostile(c, id) ? '✓' : '🔒',
+                ),
+              ),
+              (f.discounts ?? []).map((d) => row(`${Math.round(d.fraction * 100)}% off open market`, rep >= d.rep ? 'active' : `at ${d.rep}+`, rep >= d.rep ? '✓' : '🔒')),
+            ),
+          );
+        }),
+      ),
+    );
   }
 
   // ---------- Finance ----------
@@ -719,6 +792,13 @@ export class App {
             { class: 'panel' },
             h('h3', null, 'Pay'),
             h('div', { class: 'rows' }, d.lines.map((l) => row(l.label, '', signedMoney(l.amount))), row('Net', '', signedMoney(d.net), 'total'), row('Money', '', money(d.moneyAfter), 'total')),
+            d.reputation.length
+              ? h(
+                  'div',
+                  { class: 'rows small' },
+                  d.reputation.map((r) => row(`${FACTIONS[r.faction].name} standing`, `${r.after > 0 ? '+' : ''}${r.after} ${C.standing(r.after)}`, `${r.delta > 0 ? '+' : ''}${r.delta}`)),
+                )
+              : null,
             d.notes.map((n) => h('p', { class: 'warn' }, n)),
             c.overReason && !c.over ? h('p', { class: 'warn' }, c.overReason) : null,
           ),
@@ -881,6 +961,23 @@ function equipmentStats(e: EquipmentDef): string {
   parts.push(`${e.tonnage} t`);
   if (e.power) parts.push(`draws ${e.power} power`);
   return parts.join(' · ');
+}
+
+/** A small coloured chip naming a faction. */
+function factionChip(f: FactionId | undefined): HTMLElement | null {
+  if (!f) return null;
+  return h('span', { class: 'chip faction-chip', style: `color:${FACTIONS[f].css}` }, FACTIONS[f].name);
+}
+
+/** Who sells an item: nothing for the open market, else the faction and the standing it needs. */
+function sourceChip(id: string): HTMLElement | null {
+  const src = C.itemSource(id);
+  if (!src || src.open) return null;
+  return h('span', { class: 'chip faction-chip', style: `color:${FACTIONS[src.faction].css}` }, `${FACTIONS[src.faction].name} ${src.rep}+`);
+}
+
+function repText(changes: [FactionId, number][]): string {
+  return changes.map(([f, d]) => `${FACTIONS[f].name} ${d > 0 ? '+' : ''}${d}`).join(', ');
 }
 
 /** "arms 1 large, 2 medium · back 1 medium" style summary of a chassis' mounts. */

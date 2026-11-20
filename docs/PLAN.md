@@ -142,6 +142,7 @@ Milestones 1 to 5 are the prototype: a complete, playable loop with one mech, a 
 8. **Enemies and weapons.** Drones, enemy mechs that use the player's systems, and the rest of the weapons: Gatling gun, heavy cannon, more lasers, plasma, and lightning. Laser variants include continuous-beam lasers (damage and heat per second while held) alongside pulse lasers, with different range and heat trade-offs.
    - Built in two parts: weapons first, then drones and enemy mechs (which use the new weapons). Contracts show the enemy mechs and drone flights to expect, and each enemy mech raises the payout.
 9. **Factions.** Three factions with their colors and army styles, reputation, and reputation-gated shops.
+   - Built: each faction has its own army mix and colours (Royalist heavy tanks, Technocrat laser tanks and turrets, Freestar technicals and extra drones, faction mech variants), an open market everyone can buy from, and faction shops whose best gear (Condor, Roc, top energy weapons) needs standing to unlock. Freestar friends get open-market discounts.
 10. **More mission types.** Defend, escort, convoy raid, and mech hunt.
    - Also (requested after M7): **different map sizes**, with some maps bigger, as long as performance holds.
 11. **Polish.** Difficulty settings menu, tutorial, sound pass, menu and phone UI pass, and a performance check on your phone. The phone UI pass should rethink the buttons around the right stick (weapon swap, two equipment actions, interact), which get crowded as features are added.

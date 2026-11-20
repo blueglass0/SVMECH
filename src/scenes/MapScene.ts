@@ -14,6 +14,7 @@ import { DEBUG, debugInfo } from '../core/debug';
 import type { Section } from '../data/chassis';
 import { DAMAGE_RULES } from '../data/damage';
 import { ENEMIES } from '../data/enemies';
+import { FACTIONS } from '../data/factions';
 import { SECTIONS } from '../game/units/SectionDamage';
 import { portraitPhone } from '../core/orientation';
 import { ART_SCALE, bakeGroundTile } from '../game/art';
@@ -140,7 +141,14 @@ export class MapScene extends Phaser.Scene {
   create(): void {
     const cfg = this.config;
     const difficulty = { enemyCount: cfg.enemyCount, enemySpread: cfg.enemySpread, enemyDamage: cfg.enemyDamage };
-    const forces = { mechs: cfg.contract.enemyMechs ?? [], droneFlights: cfg.contract.droneFlights ?? 0 };
+    const army = cfg.contract.enemyFaction ? FACTIONS[cfg.contract.enemyFaction].army : null;
+    this.armySkin = army?.skin ?? '';
+    const forces = {
+      mechs: cfg.contract.enemyMechs ?? [],
+      droneFlights: cfg.contract.droneFlights ?? 0,
+      tankTypes: army?.tankTypes,
+      turretTypes: army?.turretTypes,
+    };
     this.map = generateDestroyTargets(this.seed, difficulty, cfg.contract.targets, forces);
     const m = this.map;
     this.world = new CollisionWorld(m.width, m.height, m.obstacles);
@@ -164,7 +172,7 @@ export class MapScene extends Phaser.Scene {
       img: this.add.image(st.x, st.y, `station-${st.type}`).setScale(1 / ART_SCALE).setDepth(1.5),
     }));
     for (const p of [...m.targets, ...m.turrets, ...m.tanks, ...m.units]) {
-      this.enemies.push(createEnemy(this, p.type, p.x, p.y, p.angle, p.home));
+      this.enemies.push(createEnemy(this, p.type, p.x, p.y, p.angle, p.home, this.armySkin));
     }
     this.structures = this.enemies.filter((e): e is Structure => e instanceof Structure);
     this.units = [this.player, ...this.enemies];
@@ -408,7 +416,7 @@ export class MapScene extends Phaser.Scene {
   devSpawnTank(type: string = DESTROY_TARGETS.tankType, distance = 420): Enemy {
     const p = this.player;
     const a = p.motor.torsoAngle;
-    const e = createEnemy(this, type, p.x + Math.cos(a) * distance, p.y + Math.sin(a) * distance, a + Math.PI);
+    const e = createEnemy(this, type, p.x + Math.cos(a) * distance, p.y + Math.sin(a) * distance, a + Math.PI, undefined, this.armySkin);
     if (!e.flying && this.world.circleBlocked(e.x, e.y, e.radius)) e.place(p.x + Math.cos(a) * 200, p.y + Math.sin(a) * 200);
     this.enemies.push(e);
     this.units.push(e);
@@ -428,6 +436,8 @@ export class MapScene extends Phaser.Scene {
     return def.name;
   }
   private devMechIndex = 0;
+  /** The enemy army's colours for this mission. */
+  private armySkin = '';
 
   devToggleInvulnerable(): boolean {
     this.player.invulnerable = !this.player.invulnerable;

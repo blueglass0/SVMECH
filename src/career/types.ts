@@ -1,5 +1,6 @@
 import type { Section } from '../data/chassis';
 import type { Loadout } from '../data/loadouts';
+import type { FactionId } from '../data/factions';
 
 export type CombatLevel = 'easy' | 'normal' | 'hard';
 
@@ -31,6 +32,9 @@ export interface Contract {
   id: number;
   seed: number;
   tier: 1 | 2 | 3;
+  /** Who hires you, and who you fight (milestone 9). Missing on older contracts. */
+  employerFaction?: FactionId;
+  enemyFaction?: FactionId;
   employer: string;
   enemy: string;
   flavor: string;
@@ -66,6 +70,8 @@ export interface CareerState {
   /** Weapon and equipment ids owned but not installed. */
   inventory: string[];
   contracts: Contract[];
+  /** Standing with each faction, -100..100 (milestone 9). */
+  reputation: Record<FactionId, number>;
   difficulty: { combat: CombatLevel; economy: CombatLevel };
   stats: { missions: number; wins: number; earned: number; spent: number };
   nextContractId: number;
@@ -122,6 +128,8 @@ export interface Debrief {
   outcome: MissionOutcome;
   contract: Contract;
   lines: DebriefLine[];
+  /** Reputation changes from this contract. */
+  reputation: { faction: FactionId; delta: number; after: number }[];
   net: number;
   moneyAfter: number;
   notes: string[];
