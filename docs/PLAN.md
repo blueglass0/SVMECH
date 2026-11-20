@@ -145,6 +145,7 @@ Milestones 1 to 5 are the prototype: a complete, playable loop with one mech, a 
    - Built: each faction has its own army mix and colours (Royalist heavy tanks, Technocrat laser tanks and turrets, Freestar technicals and extra drones, faction mech variants), an open market everyone can buy from, and faction shops whose best gear (Condor, Roc, top energy weapons) needs standing to unlock. Freestar friends get open-market discounts.
 10. **More mission types.** Defend, escort, convoy raid, and mech hunt.
    - Also (requested after M7): **different map sizes**, with some maps bigger, as long as performance holds.
+   - Part 1 built: mech hunt (a named enemy ace roams between outposts, intel pings its position), convoy raid (stop most of a truck convoy crossing the map before it escapes), and large maps on about a third of contracts. Part 2: defend and escort.
 11. **Polish.** Difficulty settings menu, tutorial, sound pass, menu and phone UI pass, and a performance check on your phone. The phone UI pass should rethink the buttons around the right stick (weapon swap, two equipment actions, interact), which get crowded as features are added.
 12. **Optional final mission.** Maybe, someday.
 

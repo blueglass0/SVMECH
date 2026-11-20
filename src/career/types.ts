@@ -1,6 +1,7 @@
 import type { Section } from '../data/chassis';
 import type { Loadout } from '../data/loadouts';
 import type { FactionId } from '../data/factions';
+import type { MapSize, MissionType } from '../data/missions';
 
 export type CombatLevel = 'easy' | 'normal' | 'hard';
 
@@ -38,6 +39,13 @@ export interface Contract {
   employer: string;
   enemy: string;
   flavor: string;
+  /** Mission type and map size (milestone 10); missing = destroy targets on a standard map. */
+  mission?: MissionType;
+  mapSize?: MapSize;
+  /** Mech hunt: the ace's mech type and callsign. */
+  ace?: string;
+  aceName?: string;
+  /** Destroy: uplinks. Mech hunt: 1. Convoy raid: trucks in the convoy. */
   targets: number;
   payout: number;
   bonus: BonusObjective;

@@ -3,6 +3,7 @@ import * as C from '../career/career';
 import type { CareerState, CombatLevel, Contract, Debrief, MissionOutcome } from '../career/types';
 import { CHASSIS, CHASSIS_ORDER, type MountDef, type MountKind, type Section } from '../data/chassis';
 import { ECONOMY, SHOP_STOCK } from '../data/economy';
+import { MISSION_TYPES } from '../data/missions';
 import { FACTIONS, FACTION_ORDER, REPUTATION, type FactionId } from '../data/factions';
 import { WEAPONS, type WeaponDef } from '../data/weapons';
 import { EQUIPMENT, type EquipmentDef } from '../data/equipment';
@@ -205,9 +206,14 @@ export class App {
               this.showHangar('contracts');
             },
           },
-          h('div', { class: 'card-top' }, h('span', { class: 'tier' }, `${ECONOMY.tiers[k.tier].name}`), h('span', { class: 'pay' }, money(k.payout))),
+          h(
+            'div',
+            { class: 'card-top' },
+            h('span', { class: 'tier' }, `${ECONOMY.tiers[k.tier].name} · ${MISSION_TYPES[k.mission ?? 'destroy'].name}${k.mapSize === 'large' ? ' · large map' : ''}`),
+            h('span', { class: 'pay' }, money(k.payout)),
+          ),
           h('div', { class: 'card-title' }, `${k.employer}`, factionChip(k.employerFaction)),
-          h('div', { class: 'muted small' }, `vs ${k.enemy}`, factionChip(k.enemyFaction), ` · destroy ${k.targets} uplinks`),
+          h('div', { class: 'muted small' }, `vs ${k.enemy}`, factionChip(k.enemyFaction), ` · ${C.objectiveText(k)}`),
           k.maxTonnage ? h('div', { class: 'small limit' }, `Tonnage limit: ${k.maxTonnage} t per mech`) : null,
           C.forcesLabel(k) ? h('div', { class: 'small threat' }, `Expect: ${C.forcesLabel(k)}`) : null,
           h('div', { class: 'small bonus' }, `Bonus +${money(C.bonusPayout(k))}: ${k.bonus.label}`),
@@ -311,7 +317,8 @@ export class App {
         h(
           'div',
           { class: 'rows' },
-          row('Objective', `Destroy ${k.targets} uplink towers, then reach evac`, ''),
+          row('Objective', `${MISSION_TYPES[k.mission ?? 'destroy'].name}: ${C.objectiveText(k)}, then reach evac`, ''),
+          k.mapSize === 'large' ? row('Map', 'large (longer walks, more ground to cover)', '') : null,
           row('Bonus', k.bonus.label, `+${money(C.bonusPayout(k))}`),
           k.maxTonnage ? row('Tonnage limit', 'every deployed mech', `${k.maxTonnage} t`) : null,
           C.forcesLabel(k) ? row('Intel', C.forcesLabel(k), '') : null,
@@ -783,7 +790,7 @@ export class App {
         'div',
         { class: `debrief ${o.won ? 'won' : 'lost'}` },
         h('h1', null, title),
-        h('p', { class: 'muted' }, `${d.contract.employer} · ${o.targetsDestroyed}/${o.targetsTotal} uplinks · ${clockTime(o.time)}`),
+        h('p', { class: 'muted' }, `${d.contract.employer} · ${o.targetsDestroyed}/${o.targetsTotal} ${MISSION_TYPES[d.contract.mission ?? 'destroy'].noun} · ${clockTime(o.time)}`),
         h(
           'div',
           { class: 'cols' },

@@ -9,7 +9,7 @@ import type { Loadout } from './loadouts';
 export interface EnemyDef {
   id: string;
   name: string;
-  kind: 'tank' | 'turret' | 'structure' | 'drone' | 'mech';
+  kind: 'tank' | 'turret' | 'structure' | 'drone' | 'mech' | 'truck';
   /** Unused for mechs (their armor comes from the chassis). */
   hp: number;
   /** Unused for mechs (the chassis decides). */
@@ -155,6 +155,18 @@ export const ENEMIES: Record<string, EnemyDef> = {
     detectRange: 640,
     aimLead: 0,
     art: { gun: 'turret-laser' },
+  },
+  truck: {
+    id: 'truck',
+    name: 'Cargo truck',
+    kind: 'truck',
+    hp: 170,
+    radius: 26,
+    speed: 44,
+    accel: 60,
+    hullTurnRate: 70,
+    detectRange: 0,
+    crushTonnage: 35,
   },
   gunTurret: {
     id: 'gunTurret',

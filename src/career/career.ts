@@ -1,9 +1,9 @@
 import { CHASSIS, CHASSIS_ORDER, type Section } from '../data/chassis';
 import { COMBAT_DIFFICULTY } from '../data/difficulty';
-import { CONTRACT_FLAVOR, ECONOMY, ECONOMY_DIFFICULTY } from '../data/economy';
+import { CONTRACT_FLAVOR, ECONOMY, ECONOMY_DIFFICULTY, HUNT_FLAVOR, RAID_FLAVOR } from '../data/economy';
 import { FACTIONS, FACTION_ORDER, OPEN_MARKET, REPUTATION, type FactionId } from '../data/factions';
 import { STARTER_LOADOUT } from '../data/loadouts';
-import { DESTROY_TARGETS } from '../data/missions';
+import { DESTROY_TARGETS, HUNT, MAP_SIZES, MISSION_TYPES, RAID, type MapSize, type MissionType } from '../data/missions';
 import { ENEMIES } from '../data/enemies';
 import { WEAPONS } from '../data/weapons';
 import { EQUIPMENT } from '../data/equipment';
@@ -431,12 +431,20 @@ function makeContract(s: CareerState): Contract {
   const enemyFaction = pick(FACTION_ORDER.filter((f) => f !== employerFaction));
   const employer = pick(FACTIONS[employerFaction].employers);
   const enemy = pick(FACTIONS[enemyFaction].forces);
+  const mission = pickMission();
+  const mapSize: MapSize = Math.random() < MAP_SIZES.large.chance ? 'large' : 'standard';
+  // Mech hunt: the ace is one of the enemy army's top-tier mechs.
+  const aceTypes = FACTIONS[enemyFaction].army.mechTypes[3];
+  const ace = mission === 'hunt' ? pick(aceTypes).type : undefined;
+  const aceName = mission === 'hunt' ? pick(HUNT.callsigns) : undefined;
+  const targets = mission === 'destroy' ? t.targets : mission === 'hunt' ? 1 : RAID.trucks[tier];
+  const flavors = mission === 'hunt' ? HUNT_FLAVOR : mission === 'raid' ? RAID_FLAVOR : CONTRACT_FLAVOR;
   const limited = Math.random() < ECONOMY.tonnageLimitChance;
   const maxTonnage = limited ? pick(ECONOMY.tonnageLimits) : undefined;
   const base = (t.payout[0] + Math.random() * (t.payout[1] - t.payout[0])) * econ(s).payouts;
   const forces = rollForces(tier, enemyFaction);
   const bonus = (limited ? ECONOMY.tonnageLimitPayBonus : 0) + forces.enemyMechs.length * ECONOMY.enemyMechPayBonus;
-  const payout = Math.round((base * (1 + bonus)) / 500) * 500;
+  const payout = Math.round((base * MISSION_TYPES[mission].payMult * (1 + bonus + MAP_SIZES[mapSize].payBonus)) / 500) * 500;
   return {
     id: s.nextContractId++,
     seed: randomSeed(),
@@ -445,10 +453,14 @@ function makeContract(s: CareerState): Contract {
     enemyFaction,
     employer,
     enemy,
-    flavor: pick(CONTRACT_FLAVOR).replace('{employer}', employer).replace('{enemy}', enemy),
-    targets: t.targets,
+    flavor: pick(flavors).replace('{employer}', employer).replace('{enemy}', enemy).replace('{ace}', aceName ?? ''),
+    mission,
+    mapSize,
+    ace,
+    aceName,
+    targets,
     payout,
-    bonus: makeBonus(t.targets),
+    bonus: makeBonus(mission === 'destroy' ? t.targets : t.targets + (mapSize === 'large' ? 1 : 0)),
     maxTonnage,
     ...forces,
   };
@@ -560,6 +572,29 @@ export function forcesLabel(k: Contract): string {
   if (mechs.length) parts.push(mechs.map((id) => ENEMIES[id]?.name ?? id).join(', '));
   if (k.droneFlights) parts.push(`${k.droneFlights} drone flight${k.droneFlights > 1 ? 's' : ''}`);
   return parts.join(' · ');
+}
+
+function pickMission(): MissionType {
+  const types = Object.keys(MISSION_TYPES) as MissionType[];
+  let r = Math.random() * types.reduce((t, m) => t + MISSION_TYPES[m].weight, 0);
+  return types.find((m) => (r -= MISSION_TYPES[m].weight) <= 0) ?? 'destroy';
+}
+
+/** Trucks you must destroy on a convoy raid. */
+export function raidRequired(trucks: number): number {
+  return Math.max(1, Math.round(trucks * RAID.required));
+}
+
+/** One-line objective for the board and debrief. */
+export function objectiveText(k: Contract): string {
+  switch (k.mission ?? 'destroy') {
+    case 'hunt':
+      return `hunt "${k.aceName}" (${ENEMIES[k.ace ?? '']?.name ?? 'enemy mech'})`;
+    case 'raid':
+      return `stop a ${k.targets}-truck convoy (${raidRequired(k.targets)} needed)`;
+    default:
+      return `destroy ${k.targets} uplinks`;
+  }
 }
 
 function pickTier(): 1 | 2 | 3 {

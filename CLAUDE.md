@@ -4,9 +4,11 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 
 ## Current milestone
 
-**Milestone 9 — Factions: built, awaiting the user's playtest**, together with the sized-mount
-rework done after M8 (the user merges and tests both at once). M1–M8 played; M8 feedback applied.
-Next by plan: 10 (more mission types: defend, escort, convoy raid, mech hunt; also bigger maps).
+**Milestone 10 part 1 — Mech hunt, convoy raid, large maps: built, awaiting the user's
+playtest**, together with the M9 feedback changes (open market, faction mechs, army weapon
+themes, stronger missiles, dev reputation buttons). M1–M9 played. Next: M10 part 2 (defend and
+escort: friendly units the enemy attacks, which needs the AI to target things other than the
+player), then 11 (polish).
 Deferred by the user: line-of-sight shadow rendering (logic already hides enemies behind
 walls); revisit as a graphics option, likely in M11.
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
@@ -28,8 +30,9 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
 - **Missiles buffed** (after M9): pack 11, rocket 12, rack 10 per missile; missile ammo ¢25 (was 40).
 - **Less ballistic ammo** (after M8): chassis ballistic capacity cut ~15% (Vulture 1150) so heavy
   gun builds have a reason to fit ammo bins.
-- **Map sizes** (requested after M7 part 2): some maps should be bigger. Planned with mission
-  types (M10); watch performance (nav grid and obstacle count grow with area).
+- **Map sizes** (requested after M7 part 2): 35% of contracts use a large map (1.375× per side,
+  obstacles scale with area, +15% pay). Measured: 320 obstacles, generation ~6 ms, logic
+  ~0.2 ms/frame.
 - Weapons don't need to knock buildings down faster; heavier weapons (heavy cannon, plasma) do it.
 - **Weapons keep fixed, parallel aim** (user decision after M8; no convergence). Instead: medium and
   heavy enemy mechs are a little bigger than the player's version (`EnemyMechDef.sizeScale`
@@ -336,6 +339,24 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   turret (Technocrats, hitscan beams), technical (Freestars, fast pickup with a gun), and enemy
   mechs lancer (Vulture, lasers), warden (Condor, large laser + shield), skirmisher (Shrike,
   heavy cannon). `EnemyDef.art` names a unit's textures.
+
+## Mission type notes (M10 part 1)
+
+- `MISSION_TYPES` (data/missions.ts): destroy (uplinks), hunt, raid; contracts roll one by weight
+  (`Contract.mission`, `mapSize`, `ace`, `aceName`; old contracts default to destroy/standard).
+  `generateMap(seed, difficulty, { mission, targets, forces, size })` shares the terrain
+  generator; `reserved` ground (sites, convoy entry/exit) stays clear. `generateDestroyTargets`
+  is a wrapper kept for tests.
+- Mech hunt (`HUNT`): an ace (one of the enemy army's tier-3 mechs ×1.6 armor, ×1.15 damage, ×0.7
+  aim error, callsign) starts at the farthest outpost and roams between outposts (`EnemyMech.roam`);
+  an intel ping marks its position every 20 s (HUD arrow + ring). Kill it, then evac.
+- Convoy raid (`RAID`): trucks (`Truck`, 170 HP, 44 u/s) follow one A* road from one side of the
+  map to the other after an 8 s delay, keeping 90 apart; escort tanks (`Tank.escortOf`) ride
+  behind them until they spot you. Destroy 70% (rounded) to win; a truck reaching the end
+  escapes (`vanish`, no wreck); too many escapes fails the contract. One HUD arrow points to the
+  nearest truck. Road length ~2200 (standard) / ~3500 (large).
+- MapScene: `objectives` (uplinks / ace / trucks), `required`, `escaped`; `setupObjectives`,
+  `updateObjectives`, `objectivesDone`. Dev "Win mission" kills every objective.
 
 ## Conventions
 
