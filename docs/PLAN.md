@@ -175,11 +175,11 @@ This is a new game project. Read docs/PLAN.md: it's the full design and build pl
 - Aim assist on phones stays light.
 - One backup mech per mission: a single extra chance (after M7).
 - Field stations (ammo, repair, swap) are single-use per station; field repair can't fix destroyed sections. Ammo costs 3× hangar prices and repairs 2× (swap fee ¢16k), so spending mid-mission is a real trade-off against the payout (raised from 1.5× after M7; repairs eased to 2× after M8).
+- Weapons keep fixed, parallel aim from their hardpoints (no convergence). Medium and heavy enemy mechs are a little bigger than the player's versions, the Condor's and Roc's arm mounts were narrowed, and bigger tanks and turrets that are easier to hit may come later.
 - Current weapons don't need to destroy buildings faster; heavier weapons (heavy cannon, plasma) are the building-wreckers.
 
 ## Open questions
 
-- [ ] **Weapon convergence.** Weapons fire straight ahead from their hardpoints, so wide mounts (the Roc's arms) can pass either side of a small target dead ahead. Options are on the table; nothing changes until decided.
 
 - [ ] **Phone weapon firing.** The tap-to-switch button works for now; find something easier to use before release.
 

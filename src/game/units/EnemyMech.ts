@@ -74,10 +74,11 @@ export class EnemyMech extends Enemy {
       skin: '-enemy',
       armorScale: this.m.armorScale,
       markers: false,
+      sizeScale: this.m.sizeScale ?? 1,
     });
     this.mech.body = this;
     this.mech.onSectionDestroyed = (s) => this.onSectionLost(s);
-    this.radius = chassis.radius;
+    this.radius = this.mech.radius;
     this.hp = this.maxHp = this.mech.sections.max.torso;
     this.input = { scheme: 'direction', move: this.move, aimTarget: null, fire1: false, fire2: false, equip1: false, equip2: false, lock: null, aimDistance: 0 };
     this.bars = BARS.map((b) => ({
@@ -148,7 +149,7 @@ export class EnemyMech extends Enemy {
       const ly = ty + p.vy * lead;
       const ld = Math.max(1, Math.hypot(lx - this.x, ly - this.y));
       // Weapons fire straight ahead from their hardpoint: turn so the primary's line crosses the target.
-      const offset = primary ? Math.asin(Math.max(-1, Math.min(1, primary.mount.y / ld))) : 0;
+      const offset = primary ? Math.asin(Math.max(-1, Math.min(1, (primary.mount.y * this.mech.opts.sizeScale) / ld))) : 0;
       this.aimErrorTimer -= dt;
       if (this.aimErrorTimer <= 0) {
         this.aimErrorTimer = 0.7 + Math.random() * 0.6;

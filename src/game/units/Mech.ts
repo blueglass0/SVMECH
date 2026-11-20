@@ -57,9 +57,11 @@ export interface MechOptions {
   spreadMult: number;
   /** Show the torso and leg markers (the player's mech). */
   markers: boolean;
+  /** Body size relative to the chassis (bigger enemy mechs are easier to hit); hardpoints scale with it. */
+  sizeScale: number;
 }
 
-const PLAYER_OPTIONS: MechOptions = { team: 'player', skin: '', armorScale: 1, damageMult: 1, spreadMult: 1, markers: true };
+const PLAYER_OPTIONS: MechOptions = { team: 'player', skin: '', armorScale: 1, damageMult: 1, spreadMult: 1, markers: true, sizeScale: 1 };
 
 /** Runtime state of activated equipment. */
 export interface EquipmentState {
@@ -126,7 +128,7 @@ export class Mech implements Unit {
     this.team = this.opts.team;
     this.chassis = CHASSIS[state.chassis];
     this.id = state.id;
-    this.radius = this.chassis.radius;
+    this.radius = this.chassis.radius * this.opts.sizeScale;
     this.equipmentIds = [...state.equipment];
     this.loadout = mechStats(state);
     const k = this.opts.armorScale;
@@ -416,7 +418,10 @@ export class Mech implements Unit {
     const m = this.motor;
     const ca = Math.cos(m.torsoAngle);
     const sa = Math.sin(m.torsoAngle);
-    return { x: m.pos.x + w.mount.x * ca - w.mount.y * sa, y: m.pos.y + w.mount.x * sa + w.mount.y * ca };
+    const k = this.opts.sizeScale;
+    const mx = w.mount.x * k;
+    const my = w.mount.y * k;
+    return { x: m.pos.x + mx * ca - my * sa, y: m.pos.y + mx * sa + my * ca };
   }
 
   private fireWeapon(w: MountedWeapon, combat: Combat, lock: Unit | null, aimDistance: number): void {

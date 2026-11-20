@@ -49,6 +49,12 @@ export interface EnemyMechDef {
   strafe: number;
   /** Seconds after spotting you before they open fire. */
   reaction: number;
+  /**
+   * Body size relative to the player's version of the chassis. Medium and heavy enemy mechs are
+   * a little bigger so both arms' guns can land on them (weapons fire straight from their mounts).
+   * Keep the diameter under the 100-unit minimum gap between obstacles.
+   */
+  sizeScale?: number;
 }
 
 export const ENEMIES: Record<string, EnemyDef> = {
@@ -176,6 +182,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
       damageScale: 0.37,
       aimErrorDeg: 4,
       strafe: 0.7,
+      sizeScale: 1.1,
       reaction: 0.8,
     },
   },
@@ -201,6 +208,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
       damageScale: 0.33,
       aimErrorDeg: 4,
       strafe: 0.5,
+      sizeScale: 1.15,
       reaction: 0.9,
     },
   },
@@ -227,6 +235,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
       damageScale: 0.36,
       aimErrorDeg: 3.5,
       strafe: 0.3,
+      sizeScale: 1.12,
       reaction: 1,
     },
   },

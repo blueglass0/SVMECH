@@ -7,7 +7,8 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 **Milestone 8 (both parts) — weapons, drones and enemy mechs: built, awaiting the user's
 playtest** (the user is testing parts 1 and 2 together). M1–M7 signed off. Next by plan: 9
 (factions). Open: the user wants ideas on weapon convergence (wide mounts miss small targets
-dead ahead) before anything changes; see the M8 part 2 notes.
+dead ahead): decided, see below. The user floated replacing ballistic/energy hardpoints with
+small/medium/large mounts (and sized missile mounts); discussed, awaiting their call before M9.
 Deferred by the user: line-of-sight shadow rendering (logic already hides enemies behind
 walls); revisit as a graphics option, likely in M11.
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
@@ -31,6 +32,11 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
 - **Map sizes** (requested after M7 part 2): some maps should be bigger. Planned with mission
   types (M10); watch performance (nav grid and obstacle count grow with area).
 - Weapons don't need to knock buildings down faster; heavier weapons (heavy cannon, plasma) do it.
+- **Weapons keep fixed, parallel aim** (user decision after M8; no convergence). Instead: medium and
+  heavy enemy mechs are a little bigger than the player's version (`EnemyMechDef.sizeScale`
+  1.1–1.15, hardpoints scale too), Condor and Roc arm mounts were narrowed (Roc ±24–34, Condor
+  ±21–27), and bigger tanks/turrets may come later. Players can put guns on one arm to control
+  where shots come from.
 - **Chassis feel:** heavier chassis get lower turn rates and more momentum (lower accel/decel),
   lights turn and accelerate quicker. The movement numbers in `chassis.ts` are enough to make
   chassis feel distinct (user-approved, M2).
@@ -258,8 +264,7 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   chains, splash and most stream frames don't count as hits (`onUnitHit(..., counts)`).
 - Pools: beams 24 (pulses, arcs, PD tracers), streams 12 (shown only on frames they fire).
   Measured ~0.4–0.5 ms/frame logic with Gatling, heavy cannon, beam, lightning and plasma firing.
-- Weapons still fire parallel from their hardpoints. Wide mounts (Roc arms at ±40) can pass
-  either side of a small target dead ahead; revisit if it bothers the user.
+- Weapons still fire parallel from their hardpoints (kept on purpose, see decisions).
 
 ## Drone and enemy mech notes (M8 part 2)
 
