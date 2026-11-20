@@ -233,8 +233,13 @@ export class EnemyMech extends Enemy {
     this.patrolWait = 3 + Math.random() * 4;
     const a = Math.random() * Math.PI * 2;
     const r = 120 + Math.random() * 300;
-    this.path.setGoal(this.home.x + Math.cos(a) * r, this.home.y + Math.sin(a) * r);
+    // A roaming mech (the hunted ace) wanders between outposts instead of guarding one.
+    const c = this.roam?.length ? this.roam[Math.floor(Math.random() * this.roam.length)] : this.home;
+    this.path.setGoal(c.x + Math.cos(a) * r, c.y + Math.sin(a) * r);
   }
+
+  /** Points to wander between when not fighting (mech hunt). */
+  roam?: Vec[];
 
   /** The working weapon doing the most damage that reaches the target (else the most damaging overall). */
   private primaryWeapon(d: number): MountedWeapon | null {

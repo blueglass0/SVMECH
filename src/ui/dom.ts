@@ -183,6 +183,10 @@ function tuningPanel(game: Phaser.Game, app: App): HTMLElement {
   button(dev, 'Hit legs', () => map()?.devDamageSection('legs'));
   button(dev, 'Hit torso', () => map()?.devDamageSection('torso'));
   button(dev, '+¢100k', () => app.devAddMoney(100000));
+  button(dev, 'Royalists +20', () => app.devAddRep('royalists', 20));
+  button(dev, 'Technocrats +20', () => app.devAddRep('technocrats', 20));
+  button(dev, 'Freestars +20', () => app.devAddRep('freestars', 20));
+  button(dev, 'All factions -20', () => app.devAddRep(null, -20));
   panel.append(devTitle, dev);
   return panel;
 }

@@ -73,17 +73,15 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
     name: 'Royalists',
     css: '#e0574a',
     blurb: 'Stern authoritarians descended from ancient Earth governments.',
-    fights: 'Big numbers, heavy mechs, lots of guns.',
-    sells: 'Heavy mechs and ballistic weapons.',
+    fights: 'Big numbers, heavy mechs, cannons everywhere.',
+    sells: 'Cannon platforms, missile racks and heavy reactors.',
     employers: ['Crown Logistics Office', 'Royal Colonial Guard', 'House Varran Treasury', 'Ministry of the Frontier'],
     forces: ['Royal Guard', 'Crown Garrison', 'House Varran Lancers', 'Royal Armoured Brigade'],
     shop: [
-      { item: 'gatling', rep: 0 },
       { item: 'heavyReactor', rep: 10 },
-      { item: 'condor', rep: 20 },
-      { item: 'heavyCannon', rep: 30 },
-      { item: 'missileRack', rep: 40 },
-      { item: 'roc', rep: 55 },
+      { item: 'heavyCannon', rep: 20 },
+      { item: 'missileRack', rep: 35 },
+      { item: 'bastion', rep: 45 },
     ],
     army: {
       enemyCount: 1.25,
@@ -92,16 +90,17 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
         { type: 'heavyTank', weight: 2 },
         { type: 'missileTank', weight: 1 },
       ],
-      turretTypes: ['gunTurret', 'cannonTurret'],
+      turretTypes: ['cannonTurret', 'cannonTurret', 'gunTurret'],
       mechTypes: {
-        1: [{ type: 'trooper', weight: 1 }],
+        1: [{ type: 'guardsman', weight: 1 }],
         2: [
-          { type: 'trooper', weight: 2 },
+          { type: 'guardsman', weight: 2 },
           { type: 'brawler', weight: 2 },
         ],
         3: [
           { type: 'brawler', weight: 2 },
-          { type: 'juggernaut', weight: 2 },
+          { type: 'castellan', weight: 2 },
+          { type: 'juggernaut', weight: 1 },
         ],
       },
       extraMechs: 0,
@@ -115,20 +114,18 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
     css: '#4f9dff',
     blurb: 'Cybernetic transhumanists, the most advanced faction.',
     fights: 'Energy weapons and advanced parts, smaller forces.',
-    sells: 'Energy weapons, reactors, sensors and shields.',
+    sells: 'Specialised energy weapons, the Seraph energy frame, sensors, shields and reactors.',
     employers: ['Lumen Collective', 'Axiom Research Directorate', 'The Continuity Institute', 'Helix Synthesis Lab'],
     forces: ['Axiom Security', 'Lumen Wardens', 'Continuity Enforcers', 'Helix Guard'],
     shop: [
-      { item: 'pulseLaser', rep: 0 },
       { item: 'sensorSuite', rep: 0 },
-      { item: 'beamLaser', rep: 15 },
-      { item: 'doubleHeatSink', rep: 15 },
-      { item: 'shieldGenerator', rep: 25 },
-      { item: 'largeLaser', rep: 30 },
-      { item: 'plasma', rep: 40 },
-      { item: 'radarArray', rep: 40 },
-      { item: 'heavyBeamLaser', rep: 55 },
-      { item: 'assaultReactor', rep: 65 },
+      { item: 'doubleHeatSink', rep: 10 },
+      { item: 'shieldGenerator', rep: 15 },
+      { item: 'plasma', rep: 25 },
+      { item: 'seraph', rep: 30 },
+      { item: 'radarArray', rep: 30 },
+      { item: 'heavyBeamLaser', rep: 40 },
+      { item: 'assaultReactor', rep: 50 },
     ],
     army: {
       enemyCount: 0.75,
@@ -141,10 +138,10 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
         1: [{ type: 'lancer', weight: 1 }],
         2: [
           { type: 'lancer', weight: 3 },
-          { type: 'warden', weight: 1 },
+          { type: 'arbiter', weight: 1 },
         ],
         3: [
-          { type: 'lancer', weight: 1 },
+          { type: 'arbiter', weight: 2 },
           { type: 'warden', weight: 2 },
         ],
       },
@@ -158,14 +155,15 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
     name: 'Freestars',
     css: '#b08a5a',
     blurb: 'Ragtag rebels and outcasts on the edge of anarchy.',
-    fights: 'Light mechs, drones, ruthless guerrilla tactics.',
-    sells: 'Light mechs and cheap weathered gear.',
+    fights: 'Light mechs, machine guns, drones and guerrilla tactics.',
+    sells: 'Fast light mechs, lightning guns and cheap weathered gear.',
     employers: ['Free Haven Council', 'The Dust Runners', 'Kessel Row Cooperative', 'Open Sky Caravan'],
     forces: ['Dust Runner Cells', 'Free Haven Militia', 'Ashfall Raiders', 'Red Ridge Separatists'],
     shop: [
+      { item: 'jackal', rep: 5 },
       { item: 'pointDefense', rep: 10 },
       { item: 'shrike', rep: 20 },
-      { item: 'lightning', rep: 30 },
+      { item: 'lightning', rep: 25 },
     ],
     discounts: [
       { rep: 20, fraction: 0.1 },
@@ -174,21 +172,24 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
     army: {
       enemyCount: 1,
       tankTypes: [
-        { type: 'technical', weight: 3 },
-        { type: 'lightTank', weight: 1 },
+        { type: 'technical', weight: 4 },
         { type: 'missileTank', weight: 1 },
       ],
-      turretTypes: ['gunTurret', 'cannonTurret'],
+      turretTypes: ['gunTurret'],
       mechTypes: {
-        1: [{ type: 'raider', weight: 1 }],
+        1: [
+          { type: 'raider', weight: 1 },
+          { type: 'harrier', weight: 1 },
+        ],
         2: [
-          { type: 'raider', weight: 2 },
-          { type: 'skirmisher', weight: 2 },
+          { type: 'raider', weight: 1 },
+          { type: 'harrier', weight: 2 },
+          { type: 'skirmisher', weight: 1 },
         ],
         3: [
-          { type: 'raider', weight: 1 },
+          { type: 'harrier', weight: 2 },
           { type: 'skirmisher', weight: 2 },
-          { type: 'trooper', weight: 1 },
+          { type: 'raider', weight: 1 },
         ],
       },
       extraMechs: 0,
@@ -199,18 +200,25 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
 };
 
 /**
- * Open market: sold to everyone regardless of reputation (Freestars friends get it cheaper).
- * Anything not here is sold by one faction (`FactionDef.shop`).
+ * Open market: sold to everyone regardless of reputation (Freestars friends get it cheaper):
+ * a generalist mech in every weight class and the common weapons. Faction gear is the
+ * specialised kit (`FactionDef.shop`).
  */
 export const OPEN_MARKET = [
-  // Mechs
+  // Mechs: a generalist in every weight class.
   'kestrel',
   'vulture',
+  'condor',
+  'roc',
   // Weapons
   'machineGun',
   'autocannon',
+  'gatling',
   'smallLaser',
+  'pulseLaser',
   'laser',
+  'beamLaser',
+  'largeLaser',
   'rocketPod',
   'missilePack',
   // Equipment

@@ -299,7 +299,30 @@ export function bakeCombatArt(scene: Phaser.Scene): void {
       g.fillStyle(P.accent).fillCircle(3, 0, 3);
     });
     bakeDrone(scene, 'drone' + skin, P.hull, P.edge, P.accent);
+    // Convoy truck: cab at the front, covered cargo bed behind.
+    bake(scene, 'truck' + skin, 66, 40, (g) => {
+      g.fillStyle(0x1e2124).fillRect(-24, -17, 12, 4).fillRect(-24, 13, 12, 4).fillRect(14, -17, 10, 4).fillRect(14, 13, 10, 4);
+      g.fillStyle(P.hullDark).fillRoundedRect(-30, -15, 40, 30, 3);
+      g.lineStyle(1.5, P.edge, 0.8).strokeRoundedRect(-30, -15, 40, 30, 3);
+      g.lineStyle(1, P.edge, 0.4);
+      for (const x of [-20, -10, 0]) g.lineBetween(x, -15, x, 15);
+      g.fillStyle(P.hull).fillRoundedRect(13, -13, 17, 26, 4);
+      g.fillStyle(0x1c2329).fillRect(23, -9, 5, 18);
+      g.fillStyle(P.accent).fillRect(29, -11, 2, 3).fillRect(29, 8, 2, 3);
+    });
   }
+  bake(scene, 'truck-wreck', 66, 40, (g) => {
+    g.fillStyle(0x26292b).fillRoundedRect(-30, -15, 40, 30, 3);
+    g.fillStyle(0x2e3330).fillRoundedRect(13, -13, 17, 26, 4);
+    g.lineStyle(1.5, 0x45494a, 0.6).strokeRoundedRect(-30, -15, 40, 30, 3);
+  });
+  // Intel ping: where the hunted mech was last reported.
+  bake(scene, 'intel-ping', 120, 120, (g) => {
+    g.lineStyle(3, 0xe8a33d, 0.9).strokeCircle(0, 0, 50);
+    g.lineStyle(1.5, 0xe8a33d, 0.5).strokeCircle(0, 0, 34);
+    g.lineStyle(2, 0xe8a33d, 0.9);
+    g.lineBetween(-58, 0, -40, 0).lineBetween(40, 0, 58, 0).lineBetween(0, -58, 0, -40).lineBetween(0, 40, 0, 58);
+  });
   // Wrecks: one charred version per shape.
   bake(scene, 'tank-hull-wreck', 64, 52, (g) => {
     g.fillStyle(0x232628, 1);

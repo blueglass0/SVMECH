@@ -177,6 +177,53 @@ export const CHASSIS: Record<string, ChassisDef> = {
     },
   },
 
+  jackal: {
+    id: 'jackal',
+    name: 'Jackal',
+    weightClass: 'light',
+    tonnage: 25,
+    radius: 22,
+    price: 180000,
+    maxTonnage: 25,
+    baseTonnage: 12,
+    internalSlots: 3,
+    power: 4,
+    movement: {
+      maxSpeed: 240,
+      reverseFactor: 0.6,
+      accel: 170,
+      decel: 210,
+      legTurnRate: 140,
+      legTurnAccel: 560,
+      torsoTurnRate: 160,
+      strideLength: 34,
+      stepShake: 0.0004,
+    },
+    sections: { torso: 190, leftArm: 75, rightArm: 75, legs: 100 },
+    heatCapacity: 70,
+    heatDissipation: 5,
+    ammoCapacity: { ballistic: 1100, missile: 12 },
+    // Freestar runabout: lots of small guns, a rocket pod, and speed.
+    mounts: [
+      { id: 'la-1', section: 'leftArm', kind: 'direct', size: 'small', x: 21, y: -14 },
+      { id: 'la-2', section: 'leftArm', kind: 'direct', size: 'small', x: 17, y: -19 },
+      { id: 'ra-1', section: 'rightArm', kind: 'direct', size: 'small', x: 21, y: 14 },
+      { id: 'ra-2', section: 'rightArm', kind: 'direct', size: 'small', x: 17, y: 19 },
+      { id: 'b-1', section: 'torso', kind: 'back', size: 'small', x: 3, y: -8 },
+    ],
+    vision: { coneDeg: 52, range: 700, radius: 200 },
+    stock: {
+      weapons: [
+        { mount: 'la-1', weapon: 'machineGun', group: 1 },
+        { mount: 'la-2', weapon: 'machineGun', group: 1 },
+        { mount: 'ra-1', weapon: 'machineGun', group: 1 },
+        { mount: 'ra-2', weapon: 'machineGun', group: 1 },
+        { mount: 'b-1', weapon: 'rocketPod', group: 2 },
+      ],
+      equipment: ['lightReactor'],
+    },
+  },
+
   shrike: {
     id: 'shrike',
     name: 'Shrike',
@@ -209,6 +256,49 @@ export const CHASSIS: Record<string, ChassisDef> = {
     stock: {
       weapons: [{ mount: 't-l', weapon: 'largeLaser', group: 1 }],
       equipment: ['lightReactor', 'heatSink', 'heatSink'],
+    },
+  },
+
+  seraph: {
+    id: 'seraph',
+    name: 'Seraph',
+    weightClass: 'medium',
+    tonnage: 55,
+    radius: 31,
+    price: 520000,
+    maxTonnage: 55,
+    baseTonnage: 32,
+    internalSlots: 6,
+    power: 12,
+    movement: {
+      maxSpeed: 145,
+      reverseFactor: 0.55,
+      accel: 85,
+      decel: 120,
+      legTurnRate: 78,
+      legTurnAccel: 230,
+      torsoTurnRate: 105,
+      strideLength: 46,
+      stepShake: 0.0012,
+    },
+    sections: { torso: 360, leftArm: 140, rightArm: 140, legs: 170 },
+    heatCapacity: 140,
+    heatDissipation: 9,
+    ammoCapacity: { ballistic: 300, missile: 0 },
+    // Technocrat energy frame: strong built-in power and cooling, little room for ammo.
+    mounts: [
+      { id: 'la-1', section: 'leftArm', kind: 'direct', size: 'large', x: 28, y: -22 },
+      { id: 'la-2', section: 'leftArm', kind: 'direct', size: 'medium', x: 23, y: -28 },
+      { id: 'ra-1', section: 'rightArm', kind: 'direct', size: 'medium', x: 28, y: 22 },
+      { id: 'ra-2', section: 'rightArm', kind: 'direct', size: 'medium', x: 23, y: 28 },
+    ],
+    vision: { coneDeg: 48, range: 680, radius: 170 },
+    stock: {
+      weapons: [
+        { mount: 'la-1', weapon: 'largeLaser', group: 1 },
+        { mount: 'ra-1', weapon: 'laser', group: 2 },
+      ],
+      equipment: ['heavyReactor', 'doubleHeatSink'],
     },
   },
 
@@ -253,6 +343,51 @@ export const CHASSIS: Record<string, ChassisDef> = {
         { mount: 'ra-b', weapon: 'autocannon', group: 1 },
         { mount: 'ra-e', weapon: 'laser', group: 2 },
         { mount: 't-m', weapon: 'missilePack', group: 2 },
+      ],
+      equipment: ['standardReactor', 'heatSink'],
+    },
+  },
+
+  bastion: {
+    id: 'bastion',
+    name: 'Bastion',
+    weightClass: 'heavy',
+    tonnage: 80,
+    radius: 39,
+    price: 820000,
+    maxTonnage: 80,
+    baseTonnage: 46,
+    internalSlots: 8,
+    power: 4,
+    movement: {
+      maxSpeed: 105,
+      reverseFactor: 0.48,
+      accel: 52,
+      decel: 75,
+      legTurnRate: 52,
+      legTurnAccel: 130,
+      torsoTurnRate: 62,
+      strideLength: 58,
+      stepShake: 0.0025,
+    },
+    sections: { torso: 640, leftArm: 260, rightArm: 260, legs: 300 },
+    heatCapacity: 110,
+    heatDissipation: 7,
+    ammoCapacity: { ballistic: 2600, missile: 24 },
+    // Royalist gun platform: two big cannon mounts, deep ammo, weak frame power.
+    mounts: [
+      { id: 'la-1', section: 'leftArm', kind: 'direct', size: 'large', x: 40, y: -22 },
+      { id: 'la-2', section: 'leftArm', kind: 'direct', size: 'medium', x: 34, y: -29 },
+      { id: 'ra-1', section: 'rightArm', kind: 'direct', size: 'large', x: 40, y: 22 },
+      { id: 'ra-2', section: 'rightArm', kind: 'direct', size: 'medium', x: 34, y: 29 },
+      { id: 'b-1', section: 'torso', kind: 'back', size: 'medium', x: 5, y: -13 },
+    ],
+    vision: { coneDeg: 36, range: 600, radius: 145 },
+    stock: {
+      weapons: [
+        { mount: 'la-1', weapon: 'heavyCannon', group: 1 },
+        { mount: 'ra-1', weapon: 'heavyCannon', group: 1 },
+        { mount: 'b-1', weapon: 'missilePack', group: 2 },
       ],
       equipment: ['standardReactor', 'heatSink'],
     },
@@ -309,6 +444,6 @@ export const CHASSIS: Record<string, ChassisDef> = {
 };
 
 /** Chassis the shop sells, in display order. */
-export const CHASSIS_ORDER = ['kestrel', 'shrike', 'vulture', 'condor', 'roc'];
+export const CHASSIS_ORDER = ['kestrel', 'jackal', 'shrike', 'vulture', 'seraph', 'condor', 'bastion', 'roc'];
 
 export const STARTER_CHASSIS = 'vulture';

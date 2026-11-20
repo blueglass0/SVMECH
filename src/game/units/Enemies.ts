@@ -42,6 +42,9 @@ export class Tank extends Gunner {
     this.gun = scene.add.image(x, y, (def.art?.gun ?? 'tank-turret') + skin).setScale(1 / ART_SCALE).setDepth(5);
   }
   private body: string;
+  /** Convoy raid: the truck this tank guards (it follows until it spots you). */
+  escortOf?: Truck;
+  private escortSide = (Math.random() < 0.5 ? -1 : 1) * 60;
 
   update(dt: number, ctx: AiContext): void {
     if (!this.alive) return;
@@ -117,6 +120,12 @@ export class Tank extends Gunner {
 
   /** Wander between points near home, pausing at each. */
   private patrol(dt: number): void {
+    // Convoy escort: ride behind the truck it guards.
+    if (this.escortOf?.alive) {
+      const t = this.escortOf;
+      this.setGoal(t.x - Math.cos(t.heading) * 110 + Math.cos(t.heading + Math.PI / 2) * this.escortSide, t.y - Math.sin(t.heading) * 110 + Math.sin(t.heading + Math.PI / 2) * this.escortSide);
+      return;
+    }
     if (this.hasGoal) return;
     this.wait -= dt;
     if (this.wait > 0) return;
@@ -169,6 +178,74 @@ export class Turret extends Gunner {
   }
 }
 
+/**
+ * Convoy truck (raid missions): unarmed, follows the road (a nav path) at a steady pace,
+ * keeping its distance from the truck ahead. Reaching the end of the road = it got away.
+ */
+export class Truck extends Enemy {
+  heading: number;
+  /** Got off the map: not a kill. */
+  escaped = false;
+  /** The convoy waits until this is set. */
+  started = false;
+  path: Vec[] = [];
+  /** The truck in front, to keep spacing. */
+  ahead: Truck | null = null;
+  spacing = 90;
+  private index = 0;
+  private speed = 0;
+  private img: Phaser.GameObjects.Image;
+
+  constructor(scene: Phaser.Scene, def: EnemyDef, x: number, y: number, angle: number, skin = '') {
+    super(scene, def, x, y);
+    this.heading = angle;
+    this.img = scene.add.image(x, y, 'truck' + skin).setScale(1 / ART_SCALE).setDepth(4).setRotation(angle);
+  }
+
+  update(dt: number, ctx: AiContext): void {
+    if (!this.alive) return;
+    let targetSpeed = 0;
+    if (this.started) {
+      while (this.index < this.path.length && Math.hypot(this.path[this.index].x - this.x, this.path[this.index].y - this.y) < 40) this.index++;
+      if (this.index >= this.path.length) {
+        this.escaped = true;
+        this.alive = false;
+        return;
+      }
+      const wp = this.path[this.index];
+      const want = Math.atan2(wp.y - this.y, wp.x - this.x);
+      this.heading = wrapAngle(approachAngle(this.heading, want, (this.def.hullTurnRate ?? 70) * DEG * dt));
+      targetSpeed = (this.def.speed ?? 50) * Math.max(0, Math.cos(wrapAngle(want - this.heading)));
+      const a = this.ahead;
+      if (a && a.alive && Math.hypot(a.x - this.x, a.y - this.y) < this.spacing) targetSpeed = 0;
+    }
+    this.speed = approach(this.speed, targetSpeed, (this.def.accel ?? 60) * dt);
+    const pos = { x: this.x + Math.cos(this.heading) * this.speed * dt, y: this.y + Math.sin(this.heading) * this.speed * dt };
+    ctx.world.resolveCircle(pos, this.radius, ctx.bodies, this, this.def.crushTonnage ?? 0);
+    this.x = pos.x;
+    this.y = pos.y;
+    this.img.setPosition(this.x, this.y).setRotation(this.heading);
+    if (this.hp < this.maxHp) this.updateBar();
+  }
+
+  /** Got away: leave the map without a wreck. */
+  vanish(): void {
+    this.img.setVisible(false);
+    this.barBg.setVisible(false);
+    this.barFill.setVisible(false);
+    this.setDetection('hidden', -Infinity);
+  }
+
+  protected parts(): Phaser.GameObjects.Image[] {
+    return [this.img];
+  }
+
+  protected onDestroyed(fx: Effects): void {
+    this.img.setTexture('truck-wreck').setDepth(2);
+    fx.explosion(this.x, this.y, 1.1);
+  }
+}
+
 /** Mission target: no weapon, just HP. */
 export class Structure extends Enemy {
   private img: Phaser.GameObjects.Image;
@@ -211,5 +288,7 @@ export function createEnemy(scene: Phaser.Scene, type: string, x: number, y: num
       return new Drone(scene, def, x, y, angle, home ?? { x, y }, skin);
     case 'mech':
       return new EnemyMech(scene, def, x, y, angle, home ?? { x, y }, skin);
+    case 'truck':
+      return new Truck(scene, def, x, y, angle, skin);
   }
 }

@@ -4,9 +4,11 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 
 ## Current milestone
 
-**Milestone 9 — Factions: built, awaiting the user's playtest**, together with the sized-mount
-rework done after M8 (the user merges and tests both at once). M1–M8 played; M8 feedback applied.
-Next by plan: 10 (more mission types: defend, escort, convoy raid, mech hunt; also bigger maps).
+**Milestone 10 part 1 — Mech hunt, convoy raid, large maps: built, awaiting the user's
+playtest**, together with the M9 feedback changes (open market, faction mechs, army weapon
+themes, stronger missiles, dev reputation buttons). M1–M9 played. Next: M10 part 2 (defend and
+escort: friendly units the enemy attacks, which needs the AI to target things other than the
+player), then 11 (polish).
 Deferred by the user: line-of-sight shadow rendering (logic already hides enemies behind
 walls); revisit as a graphics option, likely in M11.
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
@@ -25,10 +27,12 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
 - **Field services are expensive on purpose** (after M7 part 2): ammo 3× hangar prices, repairs
   2× (lowered after M8: heavy mechs cost too much to patch), ¢16k swap fee, so spending
   mid-mission is a real trade-off against the payout. Tune from there.
+- **Missiles buffed** (after M9): pack 11, rocket 12, rack 10 per missile; missile ammo ¢25 (was 40).
 - **Less ballistic ammo** (after M8): chassis ballistic capacity cut ~15% (Vulture 1150) so heavy
   gun builds have a reason to fit ammo bins.
-- **Map sizes** (requested after M7 part 2): some maps should be bigger. Planned with mission
-  types (M10); watch performance (nav grid and obstacle count grow with area).
+- **Map sizes** (requested after M7 part 2): 35% of contracts use a large map (1.375× per side,
+  obstacles scale with area, +15% pay). Measured: 320 obstacles, generation ~6 ms, logic
+  ~0.2 ms/frame.
 - Weapons don't need to knock buildings down faster; heavier weapons (heavy cannon, plasma) do it.
 - **Weapons keep fixed, parallel aim** (user decision after M8; no convergence). Instead: medium and
   heavy enemy mechs are a little bigger than the player's version (`EnemyMechDef.sizeScale`
@@ -312,10 +316,16 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   employers and enemy force names, a gated shop (`shop: { item, rep }`), optional open-market
   discounts (Freestars 10% at 20, 20% at 50), and an `army` style (count multiplier, tank and
   turret mix, enemy mech types per tier, extra mechs/drone flights, colour `skin`).
-- `OPEN_MARKET` items (Kestrel, Vulture, basic weapons and equipment) sell to anyone; everything
-  else belongs to one faction. `shopStatus`/`itemShopPrice`/`itemSource` in career.ts; the Shop
-  lists everything with a faction chip and the standing needed. Condor needs Royalists 20, Roc 55,
-  Shrike Freestars 20, top energy gear Technocrats 30–65: higher-end gear is a goal.
+- `OPEN_MARKET` sells to anyone: a generalist mech per weight class (Kestrel, Vulture, Condor,
+  Roc) and the common weapons (incl. Gatling, pulse/beam/large lasers). Factions sell specialised
+  kit (after M9 feedback: too much was locked): Royalists heavy cannon 20, missile rack 35, Bastion
+  (heavy cannon platform) 45; Technocrats plasma 25, Seraph (energy frame) 30, heavy beam 40,
+  assault reactor 50, shield/sensors; Freestars Jackal (fast light, 4 small mounts) 5, Shrike 20,
+  lightning 25, discounts. `shopStatus`/`itemShopPrice`/`itemSource` in career.ts.
+- Army weapon themes (user request): Royalists lean on cannons (guardsman, brawler, castellan,
+  juggernaut; cannon turrets), Freestars on machine guns (raider, harrier, Gatling skirmisher,
+  technicals, gun turrets), Technocrats on lasers (lancer, arbiter, warden).
+- Dev (Tune panel): Royalists/Technocrats/Freestars +20, all factions -20 (`App.devAddRep`).
 - Reputation (`CareerState.reputation`, -100..100, `REPUTATION`): a win gives the employer
   +6/9/13 by tier; the faction you fought loses 4/6/9 win or lose; failing costs the employer 3.
   At -30 or below a faction won't hire you or sell to you. Levels: Hostile, Neutral (-29),
@@ -329,6 +339,24 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   turret (Technocrats, hitscan beams), technical (Freestars, fast pickup with a gun), and enemy
   mechs lancer (Vulture, lasers), warden (Condor, large laser + shield), skirmisher (Shrike,
   heavy cannon). `EnemyDef.art` names a unit's textures.
+
+## Mission type notes (M10 part 1)
+
+- `MISSION_TYPES` (data/missions.ts): destroy (uplinks), hunt, raid; contracts roll one by weight
+  (`Contract.mission`, `mapSize`, `ace`, `aceName`; old contracts default to destroy/standard).
+  `generateMap(seed, difficulty, { mission, targets, forces, size })` shares the terrain
+  generator; `reserved` ground (sites, convoy entry/exit) stays clear. `generateDestroyTargets`
+  is a wrapper kept for tests.
+- Mech hunt (`HUNT`): an ace (one of the enemy army's tier-3 mechs ×1.6 armor, ×1.15 damage, ×0.7
+  aim error, callsign) starts at the farthest outpost and roams between outposts (`EnemyMech.roam`);
+  an intel ping marks its position every 20 s (HUD arrow + ring). Kill it, then evac.
+- Convoy raid (`RAID`): trucks (`Truck`, 170 HP, 44 u/s) follow one A* road from one side of the
+  map to the other after an 8 s delay, keeping 90 apart; escort tanks (`Tank.escortOf`) ride
+  behind them until they spot you. Destroy 70% (rounded) to win; a truck reaching the end
+  escapes (`vanish`, no wreck); too many escapes fails the contract. One HUD arrow points to the
+  nearest truck. Road length ~2200 (standard) / ~3500 (large).
+- MapScene: `objectives` (uplinks / ace / trucks), `required`, `escaped`; `setupObjectives`,
+  `updateObjectives`, `objectivesDone`. Dev "Win mission" kills every objective.
 
 ## Conventions
 

@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { DISPLAY } from '../config/display';
 import { CAMERA } from '../config/controls';
 import { CHASSIS, STARTER_CHASSIS, type ChassisMovement } from '../data/chassis';
-import { DESTROY_TARGETS, MISSION_THEME } from '../data/missions';
+import { DESTROY_TARGETS, HUNT, MISSION_THEME, RAID, type MissionType } from '../data/missions';
 import { Viewport } from '../core/viewport';
 import { InputSystem, actions, touchButtons } from '../core/input';
 import { settings } from '../core/settings';
@@ -23,13 +23,13 @@ import { Effects } from '../game/combat/Effects';
 import type { Unit } from '../game/combat/types';
 import { hud } from '../game/hudState';
 import { Mech } from '../game/units/Mech';
-import { Enemy, Structure, Tank, Turret, createEnemy, type AiContext } from '../game/units/Enemies';
+import { Enemy, EnemyMech, Structure, Tank, Truck, Turret, createEnemy, type AiContext } from '../game/units/Enemies';
 import { NavGrid } from '../game/world/NavGrid';
 import { FogOverlay } from '../game/world/Fog';
 import { drawTerrain, terrainStage } from '../game/world/terrainArt';
-import { STATION_RADIUS, generateDestroyTargets, type MissionMap, type StationType } from '../game/world/mapgen';
+import { STATION_RADIUS, generateMap, type MissionMap, type StationType } from '../game/world/mapgen';
 import type { MechState, MissionConfig, MissionOutcome } from '../career/types';
-import { newCareer } from '../career/career';
+import { newCareer, raidRequired } from '../career/career';
 
 /** Mission config for quick dev runs without a career (?quick). */
 function quickConfig(seed: number): MissionConfig {
@@ -148,8 +148,11 @@ export class MapScene extends Phaser.Scene {
       droneFlights: cfg.contract.droneFlights ?? 0,
       tankTypes: army?.tankTypes,
       turretTypes: army?.turretTypes,
+      ace: cfg.contract.ace,
+      escorts: RAID.escorts[cfg.contract.tier],
     };
-    this.map = generateDestroyTargets(this.seed, difficulty, cfg.contract.targets, forces);
+    this.mission = cfg.contract.mission ?? 'destroy';
+    this.map = generateMap(this.seed, difficulty, { mission: this.mission, targets: cfg.contract.targets, forces, size: cfg.contract.mapSize ?? 'standard' });
     const m = this.map;
     this.world = new CollisionWorld(m.width, m.height, m.obstacles);
     // Tanks crush props, so props don't block their paths.
@@ -171,10 +174,14 @@ export class MapScene extends Phaser.Scene {
       used: false,
       img: this.add.image(st.x, st.y, `station-${st.type}`).setScale(1 / ART_SCALE).setDepth(1.5),
     }));
+    const escorts: Tank[] = [];
     for (const p of [...m.targets, ...m.turrets, ...m.tanks, ...m.units]) {
-      this.enemies.push(createEnemy(this, p.type, p.x, p.y, p.angle, p.home, this.armySkin));
+      const e = p.role === 'ace' ? this.createAce(p.type, p.x, p.y, p.angle) : createEnemy(this, p.type, p.x, p.y, p.angle, p.home, this.armySkin);
+      this.enemies.push(e);
+      if (p.role === 'escort' && e instanceof Tank) escorts.push(e);
     }
     this.structures = this.enemies.filter((e): e is Structure => e instanceof Structure);
+    this.setupObjectives(nav, escorts);
     this.units = [this.player, ...this.enemies];
     this.rebuildBodies();
     this.combat = new Combat(this, this.world, this.units, this.fx);
@@ -196,12 +203,16 @@ export class MapScene extends Phaser.Scene {
       this.scale.off(Phaser.Scale.Events.RESIZE, this.fitCamera, this);
     });
 
-    const total = m.targets.length;
     hud.state = 'active';
-    hud.objectiveLabel = 'Destroy uplinks';
-    hud.objectiveTotal = total;
+    hud.objectiveLabel = this.mission === 'hunt' ? `Hunt "${cfg.contract.aceName}"` : this.mission === 'raid' ? 'Destroy convoy trucks' : 'Destroy uplinks';
+    hud.objectiveTotal = this.required;
     hud.objectiveDone = 0;
-    hud.briefing = DESTROY_TARGETS.briefing(total);
+    hud.briefing =
+      this.mission === 'hunt'
+        ? `Find and destroy "${cfg.contract.aceName}". Intel pings its position.`
+        : this.mission === 'raid'
+          ? `Stop the convoy: destroy ${this.required} of ${this.objectives.length} trucks.`
+          : DESTROY_TARGETS.briefing(this.required);
     hud.bonusLabel = cfg.contract.bonus.label;
     hud.bonusState = 'open';
     hud.lastHit = 0;
@@ -254,8 +265,11 @@ export class MapScene extends Phaser.Scene {
     for (const e of this.enemies) e.update(dt, this.ai);
     for (const s of this.structures) s.pulse(time);
     for (const e of this.enemies) {
-      if (!e.alive && !this.dead.has(e)) this.onEnemyDestroyed(e);
+      if (e.alive || this.dead.has(e)) continue;
+      if (e instanceof Truck && e.escaped) this.onTruckEscaped(e);
+      else this.onEnemyDestroyed(e);
     }
+    this.updateObjectives(dt);
     this.combat.listenerX = p.x;
     this.combat.listenerY = p.y;
     this.combat.update(dt);
@@ -370,9 +384,104 @@ export class MapScene extends Phaser.Scene {
     this.evacImg = this.add.image(this.evac.x, this.evac.y, 'evac').setScale(1 / ART_SCALE).setDepth(2);
     hud.objectiveLabel = 'Reach the evac zone';
     hud.objectiveTotal = 0;
-    hud.briefing = 'Uplinks down. Get to the evac zone.';
+    hud.briefing = this.mission === 'hunt' ? 'Target destroyed. Get to the evac zone.' : this.mission === 'raid' ? 'Convoy broken. Get to the evac zone.' : 'Uplinks down. Get to the evac zone.';
+    this.pingImg?.setVisible(false);
     this.briefingUntil = this.elapsed + 4;
     play('ui', 1);
+  }
+
+  // --- Mission types (milestone 10) ---
+
+  /** The hunted ace: a tougher, sharper version of one of the army's mechs, roaming between outposts. */
+  private createAce(type: string, x: number, y: number, angle: number): Enemy {
+    const def = ENEMIES[type];
+    const name = this.config.contract.aceName ?? 'Ace';
+    const m = def.mech!;
+    const aceDef = {
+      ...def,
+      name: `"${name}" ${def.name}`,
+      detectRange: def.detectRange * 1.1,
+      mech: { ...m, armorScale: m.armorScale * HUNT.armorMult, damageScale: m.damageScale * HUNT.damageMult, aimErrorDeg: m.aimErrorDeg * HUNT.aimMult },
+    };
+    const ace = new EnemyMech(this, aceDef, x, y, angle, { x, y }, this.armySkin);
+    ace.roam = this.map.sites;
+    this.ace = ace;
+    return ace;
+  }
+
+  /** What counts toward the contract, and how many of them must fall. */
+  private setupObjectives(nav: NavGrid, escorts: Tank[]): void {
+    const m = this.map;
+    this.escaped = 0;
+    this.ace = this.mission === 'hunt' ? this.ace : null;
+    this.aceIntel = null;
+    this.pingTimer = 0;
+    this.pingImg = undefined;
+    if (this.mission === 'hunt' && this.ace) {
+      this.objectives = [this.ace];
+      this.required = 1;
+    } else if (this.mission === 'raid' && m.convoy) {
+      // The road: one A* path from entry to exit; trucks line up along its start.
+      const path: Vec[] = [];
+      if (!nav.findPath(m.convoy.start.x, m.convoy.start.y, m.convoy.end.x, m.convoy.end.y, path)) path.push({ ...m.convoy.end });
+      const n = this.config.contract.targets;
+      const trucks: Truck[] = [];
+      const points = [m.convoy.start, ...path];
+      for (let i = 0; i < n; i++) {
+        // Lead truck furthest along the road, the rest behind it.
+        const at = pointAlong(points, (n - 1 - i) * RAID.spacing);
+        const t = createEnemy(this, RAID.truckType, at.x, at.y, at.angle, undefined, this.armySkin) as Truck;
+        t.path = path;
+        t.spacing = RAID.spacing;
+        t.ahead = trucks[i - 1] ?? null;
+        trucks.push(t);
+        this.enemies.push(t);
+      }
+      escorts.forEach((e, i) => (e.escortOf = trucks[Math.min(trucks.length - 1, i % trucks.length)]));
+      this.objectives = trucks;
+      this.required = raidRequired(n);
+    } else {
+      this.objectives = this.structures;
+      this.required = this.structures.length;
+    }
+  }
+
+  private objectivesDone(): number {
+    let n = 0;
+    for (const o of this.objectives) if (!o.alive && !(o instanceof Truck && o.escaped)) n++;
+    return n;
+  }
+
+  /** Per frame: start the convoy, and ping the hunted ace's position now and then. */
+  private updateObjectives(dt: number): void {
+    if (this.mission === 'raid' && this.elapsed > RAID.startDelay) {
+      for (const o of this.objectives) if (o instanceof Truck) o.started = true;
+    }
+    if (this.mission === 'hunt' && this.ace?.alive && !this.evac) {
+      this.pingTimer -= dt;
+      if (this.pingTimer <= 0) {
+        this.pingTimer = HUNT.pingEvery;
+        this.aceIntel = { x: this.ace.x, y: this.ace.y };
+        this.pingImg ??= this.add.image(0, 0, 'intel-ping').setScale(1 / ART_SCALE).setDepth(14);
+        this.pingImg.setPosition(this.aceIntel.x, this.aceIntel.y).setVisible(true).setAlpha(1);
+        if (this.elapsed > 1) {
+          hud.briefing = 'Intel: target position updated.';
+          this.briefingUntil = this.elapsed + 2.5;
+        }
+        play('lock', 0.8);
+      }
+      this.pingImg?.setAlpha(0.35 + 0.65 * (this.pingTimer / HUNT.pingEvery));
+    }
+  }
+
+  private onTruckEscaped(t: Truck): void {
+    this.dead.add(t);
+    t.vanish();
+    this.escaped++;
+    hud.briefing = `A truck got away (${this.escaped} escaped).`;
+    this.briefingUntil = this.elapsed + 3;
+    play('warn', 0.8);
+    this.rebuildBodies();
   }
 
   /** Leave the battlefield: the mission fails but the mech comes home as it is. */
@@ -409,7 +518,7 @@ export class MapScene extends Phaser.Scene {
       this.state = 'won';
       return;
     }
-    for (const s of this.structures) s.takeDamage(1e6, s.x, s.y);
+    for (const s of this.objectives) s.takeDamage(1e6, s.x, s.y);
   }
 
   /** Dev: spawn an enemy ahead of the player (tanks, drones, enemy mechs: any EnemyDef id). */
@@ -438,6 +547,15 @@ export class MapScene extends Phaser.Scene {
   private devMechIndex = 0;
   /** The enemy army's colours for this mission. */
   private armySkin = '';
+  private mission: MissionType = 'destroy';
+  /** Units the contract is about (uplinks, the ace, convoy trucks) and how many must fall. */
+  private objectives: Enemy[] = [];
+  private required = 0;
+  private escaped = 0;
+  private ace: EnemyMech | null = null;
+  private aceIntel: Vec | null = null;
+  private pingTimer = 0;
+  private pingImg?: Phaser.GameObjects.Image;
 
   devToggleInvulnerable(): boolean {
     this.player.invulnerable = !this.player.invulnerable;
@@ -540,8 +658,7 @@ export class MapScene extends Phaser.Scene {
   private updateMission(dt: number): void {
     const p = this.player;
     if (this.state === 'active') {
-      let done = 0;
-      for (const s of this.structures) if (!s.alive) done++;
+      const done = this.objectivesDone();
       hud.objectiveDone = done;
       if (!p.alive) {
         if (this.dropTimer === 0) {
@@ -559,8 +676,13 @@ export class MapScene extends Phaser.Scene {
         } else if ((this.dropTimer -= dt) <= 0) {
           this.dropBackup();
         }
-      } else if (done === this.structures.length && !this.evac) {
+      } else if (done >= this.required && !this.evac) {
         this.openEvac();
+      } else if (!this.evac && this.objectives.length - this.escaped < this.required) {
+        // Raid: too many trucks got away to make the quota.
+        hud.briefing = 'Too many trucks got away. Contract failed.';
+        this.briefingUntil = this.elapsed + 5;
+        this.state = 'lost';
       } else if (this.evac && Math.hypot(p.x - this.evac.x, p.y - this.evac.y) < EVAC_RADIUS) {
         this.state = 'won';
         play('ui', 1);
@@ -586,8 +708,8 @@ export class MapScene extends Phaser.Scene {
         bonusAchieved: this.state === 'won' && this.bonusState() === 'done',
         time: this.elapsed,
         kills: this.kills,
-        targetsDestroyed: this.structures.filter((t) => !t.alive).length,
-        targetsTotal: this.structures.length,
+        targetsDestroyed: this.objectivesDone(),
+        targetsTotal: this.objectives.length,
         damageDealt: this.damageDealt,
         damageTaken: sum((m) => m.stats.damageTaken),
         shots: sum((m) => m.stats.shots),
@@ -832,7 +954,8 @@ export class MapScene extends Phaser.Scene {
     hud.threats.length = 0;
     for (const e of this.enemies) {
       if (!e.alive) continue;
-      if (e instanceof Structure) hud.targets.push(e);
+      // Uplinks get an arrow each; a convoy gets one arrow (its nearest truck); the ace gets intel pings.
+      if (this.objectives.includes(e) && e !== this.ace && !(e instanceof Truck)) hud.targets.push(e);
       // Threat arrows only for enemies you know about: detected now, or seen in the last few seconds.
       else if (e.engaged && Math.hypot(e.x - p.x, e.y - p.y) < 1100 && (e.detection !== 'hidden' || this.elapsed - e.lastSeenAt < 3)) {
         hud.threats.push(e);
@@ -840,6 +963,12 @@ export class MapScene extends Phaser.Scene {
     }
     if (this.elapsed > this.briefingUntil) hud.briefing = '';
     if (this.evac) hud.targets.push(this.evac);
+    else if (this.aceIntel) hud.targets.push(this.aceIntel);
+    else if (this.mission === 'raid') {
+      let nearest: Enemy | null = null;
+      for (const o of this.objectives) if (o.alive && (!nearest || Math.hypot(o.x - p.x, o.y - p.y) < Math.hypot(nearest.x - p.x, nearest.y - p.y))) nearest = o;
+      if (nearest) hud.targets.push(nearest);
+    }
     hud.stations.length = 0;
     for (const st of this.stations) if (!st.used) hud.stations.push(st);
     this.evacImg?.setRotation(this.elapsed * 0.6);
@@ -959,3 +1088,19 @@ function moneyText(n: number): string {
 
 /** Tanks crush terrain up to this tonnage (keep in line with `crushTonnage` in data/enemies.ts). */
 const TANK_CRUSH = 35;
+
+/** A point `d` units along a polyline (clamped to its ends), with the direction of travel there. */
+function pointAlong(points: Vec[], d: number): { x: number; y: number; angle: number } {
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const angle = Math.atan2(b.y - a.y, b.x - a.x);
+    if (d <= len || i === points.length - 1) {
+      const k = len > 0 ? Math.min(1, d / len) : 0;
+      return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, angle };
+    }
+    d -= len;
+  }
+  return { x: points[0].x, y: points[0].y, angle: 0 };
+}

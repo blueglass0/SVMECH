@@ -7,7 +7,7 @@ export const ECONOMY = {
   /** Fuel per deployment, per ton of mech. */
   fuelPerTon: 120,
   /** Price per ammo unit loaded. */
-  ammoPrice: { ballistic: 8, missile: 40 },
+  ammoPrice: { ballistic: 8, missile: 25 },
   /** Repair price per armor point. */
   repairPerArmor: 55,
   /** Repairing a destroyed section costs this much more (rebuilding it and its weapons). */
@@ -111,6 +111,18 @@ export const SHOP_STOCK = [
 ];
 
 /** Contract flavour. Employer and enemy names come from the factions (data/factions.ts). */
+export const HUNT_FLAVOR = [
+  'The {enemy} pilot "{ace}" has been bleeding {employer} for months. Find that mech and put it down.',
+  '{employer} has a price on "{ace}", the {enemy} ace. Intel will ping its position when they can.',
+  'Kill "{ace}". {employer} wants proof the {enemy} lost their best pilot.',
+];
+
+export const RAID_FLAVOR = [
+  'A {enemy} supply convoy is crossing the sector. {employer} wants it stopped before it reaches the front.',
+  '{employer} pays for every {enemy} truck that never arrives. The convoy is already moving.',
+  'The {enemy} are running fuel and parts through this valley. Break the convoy for {employer}.',
+];
+
 export const CONTRACT_FLAVOR = [
   'The {enemy} have been coordinating raids through a string of uplink towers. {employer} wants them gone.',
   '{employer} needs the {enemy} relay network silenced before their convoy moves through.',

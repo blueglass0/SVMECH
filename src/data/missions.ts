@@ -1,6 +1,6 @@
 /**
- * Procedural mission templates. Milestone 3 has one: destroy targets.
- * Counts are before the combat difficulty multiplier.
+ * Procedural mission templates. Counts are before the combat difficulty multiplier.
+ * The map layout (`DESTROY_TARGETS.map`) is shared by every mission type.
  */
 export const DESTROY_TARGETS = {
   name: 'Destroy targets',
@@ -52,6 +52,53 @@ export const DESTROY_TARGETS = {
   /** Targets are at least this far from the drop point. */
   targetMinDistance: 1300,
 } as const;
+
+export type MissionType = 'destroy' | 'hunt' | 'raid';
+export type MapSize = 'standard' | 'large';
+
+/**
+ * Mission types (milestone 10). Each contract rolls one by weight. `payMult` scales the
+ * tier's payout; `noun` is what the objective counter counts.
+ */
+export const MISSION_TYPES: Record<MissionType, { name: string; weight: number; payMult: number; noun: string }> = {
+  destroy: { name: 'Destroy targets', weight: 5, payMult: 1, noun: 'uplinks' },
+  hunt: { name: 'Mech hunt', weight: 2.5, payMult: 1.15, noun: 'target' },
+  raid: { name: 'Convoy raid', weight: 2.5, payMult: 1.1, noun: 'trucks' },
+};
+
+/** Map sizes: large maps are 1.375x wider and taller (about 1.9x the area, obstacles scale with it). */
+export const MAP_SIZES: Record<MapSize, { scale: number; chance: number; payBonus: number; label: string }> = {
+  standard: { scale: 1, chance: 0.65, payBonus: 0, label: 'Standard map' },
+  large: { scale: 1.375, chance: 0.35, payBonus: 0.15, label: 'Large map' },
+};
+
+/** Mech hunt: a named enemy ace roams between outposts; intel pings its position now and then. */
+export const HUNT = {
+  outposts: 3,
+  /** The ace is tougher, hits harder and aims better than a regular of its type. */
+  armorMult: 1.6,
+  damageMult: 1.15,
+  aimMult: 0.7,
+  /** Seconds between intel pings of the ace's position. */
+  pingEvery: 20,
+  callsigns: ['Grimjaw', 'Widowmaker', 'Saint Ashes', 'Red Iris', 'Hollowpoint', 'Old Thunder', 'Vesper', 'Kingfisher', 'Rust Baron', 'Nightjar'],
+};
+
+/** Convoy raid: trucks drive across the map along a road; stop enough of them before they get away. */
+export const RAID = {
+  trucks: { 1: 4, 2: 5, 3: 6 } as Record<1 | 2 | 3, number>,
+  /** Share of the trucks you must destroy (rounded: 4 → 3, 5 → 4, 6 → 4). */
+  required: 0.7,
+  /** Escort vehicles, by tier (types from the enemy army's tank mix). */
+  escorts: { 1: 2, 2: 3, 3: 4 } as Record<1 | 2 | 3, number>,
+  /** Turret outposts along the way. */
+  outposts: 2,
+  truckType: 'truck',
+  /** Gap kept between trucks in the column, units. */
+  spacing: 90,
+  /** Seconds before the convoy sets off. */
+  startDelay: 8,
+};
 
 export const MISSION_THEME = {
   ground: 0x161b20,

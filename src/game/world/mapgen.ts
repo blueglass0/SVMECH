@@ -1,7 +1,7 @@
 import type { Obstacle } from '../../core/collision';
 import { Rng } from '../../core/rng';
 import type { Vec } from '../../core/math';
-import { DESTROY_TARGETS } from '../../data/missions';
+import { DESTROY_TARGETS, HUNT, MAP_SIZES, RAID, type MapSize, type MissionType } from '../../data/missions';
 import type { CombatDifficulty } from '../../data/difficulty';
 import { ECONOMY } from '../../data/economy';
 
@@ -12,6 +12,8 @@ export interface Placement {
   angle: number;
   /** Tanks: where they guard or patrol around. */
   home?: Vec;
+  /** Mission role: the hunted ace, or a convoy escort. */
+  role?: 'ace' | 'escort';
 }
 
 /** Drone flights and enemy mechs on the map (rolled with the contract, milestone 8). */
@@ -22,6 +24,18 @@ export interface MissionForces {
   /** The enemy army's tank and turret mix (milestone 9); defaults to the faction-neutral army. */
   tankTypes?: readonly { type: string; weight: number }[];
   turretTypes?: readonly string[];
+  /** Mech hunt: the ace's mech type. */
+  ace?: string;
+  /** Convoy raid: escort vehicles riding with the convoy. */
+  escorts?: number;
+}
+
+export interface MapOptions {
+  mission: MissionType;
+  /** Destroy: uplinks to place. */
+  targets: number;
+  forces: MissionForces;
+  size: MapSize;
 }
 
 export interface MissionMap {
@@ -35,6 +49,11 @@ export interface MissionMap {
   tanks: Placement[];
   /** Drones and enemy mechs (placed like tanks, created by `createEnemy`). */
   units: Placement[];
+  mission: MissionType;
+  /** Bases / outposts (uplinks sit in the middle of these on destroy missions). */
+  sites: Vec[];
+  /** Convoy raid: where the convoy enters and where it leaves the map. */
+  convoy?: { start: Vec; end: Vec };
   /** Field stations: ammo depot, repair bay, swap station. */
   stations: { type: StationType; x: number; y: number }[];
 }
@@ -56,24 +75,51 @@ export function generateDestroyTargets(
   targetCount: number = DESTROY_TARGETS.targets,
   forces: MissionForces = { mechs: [], droneFlights: 0 },
 ): MissionMap {
+  return generateMap(seed, difficulty, { mission: 'destroy', targets: targetCount, forces, size: 'standard' });
+}
+
+/**
+ * Generate a mission map from a seed. Every mission type shares the terrain generator;
+ * they differ in what sits at the sites (uplinks, outposts) and in mission extras
+ * (the hunted ace, the convoy road). Large maps scale obstacle counts with the area.
+ */
+export function generateMap(seed: number, difficulty: CombatDifficulty, opts: MapOptions): MissionMap {
   const T = DESTROY_TARGETS;
   const M = T.map;
+  const forces = opts.forces;
   const rng = new Rng(seed);
-  const W = M.width;
-  const H = M.height;
+  const scale = MAP_SIZES[opts.size].scale;
+  const area = scale * scale;
+  const W = Math.round(M.width * scale);
+  const H = Math.round(M.height * scale);
   const gap = M.minGap;
+  /** A count range scaled to the map's area. */
+  const count = (r: readonly [number, number] | readonly number[]) => rng.int(Math.round(r[0] * area), Math.round(r[1] * area));
 
   const spawn = { x: rng.range(700, W - 700), y: H - 260, angle: -Math.PI / 2 };
 
-  // Target sites: far from the drop point and from each other.
+  // Convoy raid: the road runs from one side of the map to the other, across the far half.
+  let convoy: MissionMap['convoy'];
+  if (opts.mission === 'raid') {
+    const left = { x: gap + 140, y: rng.range(H * 0.15, H * 0.5) };
+    const right = { x: W - gap - 140, y: rng.range(H * 0.15, H * 0.5) };
+    convoy = rng.next() < 0.5 ? { start: left, end: right } : { start: right, end: left };
+  }
+  // Ground kept clear of obstacles: sites, plus the convoy's entry and exit.
+  const reserved: Vec[] = convoy ? [convoy.start, convoy.end] : [];
+
+  // Sites (uplink bases or outposts): far from the drop point and from each other.
+  const siteCount = opts.mission === 'destroy' ? opts.targets : opts.mission === 'hunt' ? HUNT.outposts : RAID.outposts;
   const sites: Vec[] = [];
-  for (let attempt = 0; sites.length < targetCount && attempt < 3000; attempt++) {
-    const minApart = attempt < 1000 ? 850 : 600;
+  for (let attempt = 0; sites.length < siteCount && attempt < 3000; attempt++) {
+    const minApart = (attempt < 1000 ? 850 : 600) * scale;
     const p = { x: rng.range(350, W - 350), y: rng.range(350, H * 0.7) };
-    if (dist(p, spawn) < T.targetMinDistance) continue;
+    if (dist(p, spawn) < T.targetMinDistance * scale) continue;
     if (sites.some((s) => dist(s, p) < minApart)) continue;
+    if (reserved.some((r) => dist(r, p) < 600)) continue;
     sites.push(p);
   }
+  reserved.push(...sites);
 
   const obstacles: Obstacle[] = [];
   // Field stations are placed after the main solids; anything placed later keeps clear of them.
@@ -82,7 +128,7 @@ export function generateDestroyTargets(
     const b = box(o);
     if (b[0] < gap || b[1] < gap || b[2] > W - gap || b[3] > H - gap) return false;
     if (boxCircleDistance(b, spawn) < T.spawnClearance) return false;
-    if (sites.some((s) => boxCircleDistance(b, s) < 260)) return false;
+    if (reserved.some((s) => boxCircleDistance(b, s) < 260)) return false;
     if (stations.some((s) => boxCircleDistance(b, s) < STATION_RADIUS + 30)) return false;
     return obstacles.every((other) => separation(o, other) >= gap);
   };
@@ -97,7 +143,7 @@ export function generateDestroyTargets(
   };
 
   // Towns: grids of buildings with alleys.
-  for (let t = rng.int(M.towns[0], M.towns[1]); t > 0; t--) {
+  for (let t = count(M.towns); t > 0; t--) {
     const cols = rng.int(2, 4);
     const rows = rng.int(2, 3);
     const pitch = rng.range(290, 340);
@@ -114,7 +160,7 @@ export function generateDestroyTargets(
   }
 
   // Rock fields.
-  for (let f = rng.int(M.rockFields[0], M.rockFields[1]); f > 0; f--) {
+  for (let f = count(M.rockFields); f > 0; f--) {
     const cx = rng.range(300, W - 300);
     const cy = rng.range(300, H - 300);
     for (let n = rng.int(5, 9); n > 0; n--) {
@@ -123,7 +169,7 @@ export function generateDestroyTargets(
   }
 
   // Long walls.
-  for (let n = rng.int(M.walls[0], M.walls[1]); n > 0; n--) {
+  for (let n = count(M.walls); n > 0; n--) {
     place(() => {
       const len = rng.range(240, 650);
       const thick = rng.range(36, 56);
@@ -134,7 +180,7 @@ export function generateDestroyTargets(
   }
 
   // Scattered cover.
-  for (let n = rng.int(M.scatter[0], M.scatter[1]); n > 0; n--) {
+  for (let n = count(M.scatter); n > 0; n--) {
     place(() => {
       const x = rng.range(gap, W - gap);
       const y = rng.range(gap, H - gap);
@@ -145,7 +191,7 @@ export function generateDestroyTargets(
   }
 
   // Concrete barriers: solid for medium mechs, so they keep the minimum gap like everything above.
-  for (let n = rng.int(M.barriers[0], M.barriers[1]); n > 0; n--) {
+  for (let n = count(M.barriers); n > 0; n--) {
     place(() => {
       const along = rng.next() < 0.5;
       return { kind: 'rect', x: rng.range(gap, W - gap), y: rng.range(gap, H - gap), w: along ? 72 : 22, h: along ? 22 : 72, type: 'barrier' };
@@ -157,7 +203,7 @@ export function generateDestroyTargets(
   for (let n = rng.int(F.stationsPerMap[0], F.stationsPerMap[1]); n > 0; n--) {
     for (let attempt = 0; attempt < 80; attempt++) {
       const p = { x: rng.range(300, W - 300), y: rng.range(300, H - 300) };
-      if (dist(p, spawn) < 700 || sites.some((s) => dist(s, p) < 600) || stations.some((s) => dist(s, p) < 900)) continue;
+      if (dist(p, spawn) < 700 || reserved.some((s) => dist(s, p) < 600) || stations.some((s) => dist(s, p) < 900)) continue;
       if (obstacles.some((o) => boxCircleDistance(box(o), p) < STATION_RADIUS + 30)) continue;
       const type: StationType = rng.next() < F.swapChance ? 'swap' : rng.next() < 0.5 ? 'ammo' : 'repair';
       stations.push({ type, ...p });
@@ -172,7 +218,7 @@ export function generateDestroyTargets(
     const b = box(o);
     if (b[0] < 20 || b[1] < 20 || b[2] > W - 20 || b[3] > H - 20) return false;
     if (boxCircleDistance(b, spawn) < 200) return false;
-    if (sites.some((s) => boxCircleDistance(b, s) < 230)) return false;
+    if (reserved.some((s) => boxCircleDistance(b, s) < 230)) return false;
     if (stations.some((s) => boxCircleDistance(b, s) < STATION_RADIUS + 20)) return false;
     for (let i = 0; i < obstacles.length; i++) if (separation(o, obstacles[i]) < (i < solids ? 10 : 4)) return false;
     return true;
@@ -180,14 +226,14 @@ export function generateDestroyTargets(
   const addProp = (o: Obstacle) => {
     if (propClear(o)) obstacles.push(o);
   };
-  for (let f = rng.int(M.forests[0], M.forests[1]); f > 0; f--) {
+  for (let f = count(M.forests); f > 0; f--) {
     const cx = rng.range(200, W - 200);
     const cy = rng.range(200, H - 200);
     for (let n = rng.int(10, 20); n > 0; n--) {
       addProp({ kind: 'circle', x: cx + rng.range(-220, 220), y: cy + rng.range(-220, 220), r: rng.range(13, 22), type: 'tree' });
     }
   }
-  for (let n = rng.int(M.fences[0], M.fences[1]); n > 0; n--) {
+  for (let n = count(M.fences); n > 0; n--) {
     const along = rng.next() < 0.5;
     let x = rng.range(150, W - 600);
     let y = rng.range(150, H - 600);
@@ -199,7 +245,7 @@ export function generateDestroyTargets(
   }
   // Sandbag barricades: medium mechs can't crush them, so they keep clear of other solids like
   // the gap rule (checked against solids only), and stay out of the base clearings.
-  for (let n = rng.int(M.sandbags[0], M.sandbags[1]); n > 0; n--) {
+  for (let n = count(M.sandbags); n > 0; n--) {
     for (let attempt = 0; attempt < 8; attempt++) {
       const along = rng.next() < 0.5;
       const o: Obstacle = { kind: 'rect', x: rng.range(gap, W - gap), y: rng.range(gap, H - gap), w: along ? 56 : 18, h: along ? 18 : 56, type: 'sandbags' };
@@ -209,7 +255,7 @@ export function generateDestroyTargets(
       }
     }
   }
-  for (let n = rng.int(M.sheds[0], M.sheds[1]); n > 0; n--) {
+  for (let n = count(M.sheds); n > 0; n--) {
     addProp({ kind: 'rect', x: rng.range(100, W - 160), y: rng.range(100, H - 160), w: rng.range(40, 62), h: rng.range(34, 52), type: 'shed' });
   }
 
@@ -220,7 +266,7 @@ export function generateDestroyTargets(
   const turretCount = Math.max(1, Math.round(T.turretsPerTarget * difficulty.enemyCount));
   const turretTypes = forces.turretTypes ?? T.turretTypes;
   for (const s of sites) {
-    targets.push({ type: T.target, x: s.x, y: s.y, angle: 0 });
+    if (opts.mission === 'destroy') targets.push({ type: T.target, x: s.x, y: s.y, angle: 0 });
     const a0 = rng.range(0, Math.PI * 2);
     for (let i = 0; i < turretCount; i++) {
       const a = a0 + (i / turretCount) * Math.PI * 2;
@@ -256,7 +302,7 @@ export function generateDestroyTargets(
   const placeTank = (near: Vec, spread: number, home: Vec) => placeUnit(tanks, () => pickWeighted(rng, tankTypes), near, spread, home);
   const guards = Math.round(T.tanksPerTarget * difficulty.enemyCount);
   for (const s of sites) for (let i = 0; i < guards; i++) placeTank(s, 380, s);
-  const roamers = Math.round(rng.int(T.roamingTanks[0], T.roamingTanks[1]) * difficulty.enemyCount);
+  const roamers = Math.round(rng.int(T.roamingTanks[0], T.roamingTanks[1]) * difficulty.enemyCount * area);
   for (let i = 0; i < roamers; i++) {
     const p = { x: rng.range(400, W - 400), y: rng.range(400, H - 900) };
     placeTank(p, 200, p);
@@ -274,7 +320,23 @@ export function generateDestroyTargets(
     for (let i = 0; i < flightSize; i++) placeUnit(units, () => T.droneType, c, 160, c, 20, 1000);
   }
 
-  return { seed, width: W, height: H, obstacles, spawn, targets, turrets, tanks, units, stations };
+  // Mech hunt: the ace starts at the outpost farthest from the drop point.
+  if (opts.mission === 'hunt' && forces.ace) {
+    const far = [...sites].sort((a, b) => dist(b, spawn) - dist(a, spawn))[0] ?? { x: W / 2, y: H * 0.3 };
+    const before = units.length;
+    placeUnit(units, () => forces.ace!, far, 300, far, 55, 1100);
+    if (units.length > before) units[units.length - 1].role = 'ace';
+  }
+  // Convoy raid: escorts wait with the trucks at the road's start.
+  if (convoy) {
+    for (let i = 0; i < (forces.escorts ?? 0); i++) {
+      const before = units.length;
+      placeUnit(units, () => pickWeighted(rng, tankTypes), convoy.start, 220, convoy.start, 40, 900);
+      if (units.length > before) units[units.length - 1].role = 'escort';
+    }
+  }
+
+  return { seed, width: W, height: H, obstacles, spawn, targets, turrets, tanks, units, stations, mission: opts.mission, sites, convoy };
 }
 
 function pickWeighted(rng: Rng, items: readonly { type: string; weight: number }[]): string {
