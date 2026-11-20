@@ -123,6 +123,18 @@ export const RAID_FLAVOR = [
   'The {enemy} are running fuel and parts through this valley. Break the convoy for {employer}.',
 ];
 
+export const DEFEND_FLAVOR = [
+  'The {enemy} are massing to hit a {employer} power station. Hold it until reinforcements arrive.',
+  '{employer} needs its generators kept running through a {enemy} assault. Waves are inbound.',
+  'Intercepted {enemy} orders point at a {employer} outpost. Dig in and keep the generators alive.',
+];
+
+export const ESCORT_FLAVOR = [
+  '{employer} is moving a convoy through {enemy} territory. Stay with the trucks and get them across.',
+  'The {enemy} have set ambushes along the only road out. {employer} needs its convoy through.',
+  'Escort a {employer} supply run past {enemy} positions. The drivers won\'t move without you close by.',
+];
+
 export const CONTRACT_FLAVOR = [
   'The {enemy} have been coordinating raids through a string of uplink towers. {employer} wants them gone.',
   '{employer} needs the {enemy} relay network silenced before their convoy moves through.',

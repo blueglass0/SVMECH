@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { DISPLAY } from '../config/display';
 import { CAMERA } from '../config/controls';
 import { CHASSIS, STARTER_CHASSIS, type ChassisMovement } from '../data/chassis';
-import { DESTROY_TARGETS, HUNT, MISSION_THEME, RAID, type MissionType } from '../data/missions';
+import { DEFEND, DESTROY_TARGETS, ESCORT, HUNT, MISSION_THEME, RAID, type MissionType } from '../data/missions';
 import { Viewport } from '../core/viewport';
 import { InputSystem, actions, touchButtons } from '../core/input';
 import { settings } from '../core/settings';
@@ -29,7 +29,8 @@ import { FogOverlay } from '../game/world/Fog';
 import { drawTerrain, terrainStage } from '../game/world/terrainArt';
 import { STATION_RADIUS, generateMap, type MissionMap, type StationType } from '../game/world/mapgen';
 import type { MechState, MissionConfig, MissionOutcome } from '../career/types';
-import { newCareer, raidRequired } from '../career/career';
+import { escortRequired, newCareer, raidRequired } from '../career/career';
+import { ConvoyTruck, FriendlyUnit, Generator } from '../game/units/Friendly';
 
 /** Mission config for quick dev runs without a career (?quick). */
 function quickConfig(seed: number): MissionConfig {
@@ -134,6 +135,8 @@ export class MapScene extends Phaser.Scene {
     this.endTimer = this.elapsed = this.kills = this.hits = this.damageDealt = 0;
     this.enemies = [];
     this.structures = [];
+    this.friendlies = [];
+    this.deadFriendlies.clear();
     this.dead.clear();
     this.chunks = [];
   }
@@ -182,7 +185,7 @@ export class MapScene extends Phaser.Scene {
     }
     this.structures = this.enemies.filter((e): e is Structure => e instanceof Structure);
     this.setupObjectives(nav, escorts);
-    this.units = [this.player, ...this.enemies];
+    this.units = [this.player, ...this.enemies, ...this.friendlies];
     this.rebuildBodies();
     this.combat = new Combat(this, this.world, this.units, this.fx);
     this.combat.onUnitHit = (u, team, dmg, counts) => this.onUnitHit(u, team, dmg, counts);
@@ -204,15 +207,16 @@ export class MapScene extends Phaser.Scene {
     });
 
     hud.state = 'active';
-    hud.objectiveLabel = this.mission === 'hunt' ? `Hunt "${cfg.contract.aceName}"` : this.mission === 'raid' ? 'Destroy convoy trucks' : 'Destroy uplinks';
-    hud.objectiveTotal = this.required;
-    hud.objectiveDone = 0;
-    hud.briefing =
-      this.mission === 'hunt'
-        ? `Find and destroy "${cfg.contract.aceName}". Intel pings its position.`
-        : this.mission === 'raid'
-          ? `Stop the convoy: destroy ${this.required} of ${this.objectives.length} trucks.`
-          : DESTROY_TARGETS.briefing(this.required);
+    hud.objectiveLabel = { hunt: `Hunt "${cfg.contract.aceName}"`, raid: 'Destroy convoy trucks', destroy: 'Destroy uplinks', defend: 'Defend · generators', escort: 'Escort · trucks across' }[this.mission];
+    hud.objectiveTotal = this.mission === 'defend' ? this.friendlies.length : this.required;
+    hud.objectiveDone = this.mission === 'defend' ? this.friendlies.length : 0;
+    hud.briefing = {
+      hunt: `Find and destroy "${cfg.contract.aceName}". Intel pings its position.`,
+      raid: `Stop the convoy: destroy ${this.required} of ${this.objectives.length} trucks.`,
+      destroy: DESTROY_TARGETS.briefing(this.required),
+      defend: `Defend the generators: ${this.wavesTotal} attack waves inbound. First in ${DEFEND.firstWave}s.`,
+      escort: `Escort the convoy: ${this.required} of ${this.friendlies.length} trucks must get across. They only move while you're close.`,
+    }[this.mission];
     hud.bonusLabel = cfg.contract.bonus.label;
     hud.bonusState = 'open';
     hud.lastHit = 0;
@@ -263,6 +267,7 @@ export class MapScene extends Phaser.Scene {
     }
 
     for (const e of this.enemies) e.update(dt, this.ai);
+    this.updateFriendlies(dt, time);
     for (const s of this.structures) s.pulse(time);
     for (const e of this.enemies) {
       if (e.alive || this.dead.has(e)) continue;
@@ -440,10 +445,155 @@ export class MapScene extends Phaser.Scene {
       escorts.forEach((e, i) => (e.escortOf = trucks[Math.min(trucks.length - 1, i % trucks.length)]));
       this.objectives = trucks;
       this.required = raidRequired(n);
+    } else if (this.mission === 'defend' && m.defense) {
+      for (const g of m.defense.generators) this.friendlies.push(new Generator(this, g.x, g.y, DEFEND.generatorHp));
+      this.objectives = [];
+      this.required = DEFEND.required;
+      this.wavesTotal = DEFEND.waves[this.config.contract.tier];
+      this.waveIndex = 0;
+      this.waveTimer = DEFEND.firstWave;
+      this.pendingMechs = [...(this.config.contract.enemyMechs ?? [])];
+      this.pendingDroneFlights = this.config.contract.droneFlights ?? 0;
+    } else if (this.mission === 'escort' && m.convoy) {
+      const path: Vec[] = [];
+      if (!nav.findPath(m.convoy.start.x, m.convoy.start.y, m.convoy.end.x, m.convoy.end.y, path)) path.push({ ...m.convoy.end });
+      const n = this.config.contract.targets;
+      const points = [m.convoy.start, ...path];
+      const trucks: ConvoyTruck[] = [];
+      for (let i = 0; i < n; i++) {
+        const at = pointAlong(points, (n - 1 - i) * ESCORT.spacing);
+        const t = new ConvoyTruck(this, at.x, at.y, at.angle, ESCORT.truckHp, ESCORT.speed);
+        t.path = path;
+        t.spacing = ESCORT.spacing;
+        t.ahead = trucks[i - 1] ?? null;
+        trucks.push(t);
+      }
+      this.friendlies.push(...trucks);
+      this.objectives = [];
+      this.required = escortRequired(n);
     } else {
       this.objectives = this.structures;
       this.required = this.structures.length;
     }
+  }
+
+  // --- Defend and escort: friendly units the enemy goes after ---
+
+  /** Generators pulse, convoy trucks drive (while you're close), deaths, objectives and waves. */
+  private updateFriendlies(dt: number, time: number): void {
+    if (this.friendlies.length === 0) return;
+    const p = this.player;
+    const go = p.alive && this.friendlies.some((f) => f.alive && Math.hypot(f.x - p.x, f.y - p.y) < ESCORT.stayWithin);
+    for (const f of this.friendlies) {
+      if (f instanceof Generator) f.pulse(time);
+      else if (f instanceof ConvoyTruck) {
+        const was = f.arrived;
+        f.update(dt, go, this.world, this.bodies);
+        if (f.arrived && !was) {
+          hud.briefing = 'A truck made it through.';
+          this.briefingUntil = this.elapsed + 2.5;
+          play('ui', 0.8);
+          this.rebuildBodies();
+        }
+      }
+      if (!f.alive && !this.deadFriendlies.has(f)) {
+        this.deadFriendlies.add(f);
+        f.destroy(this.fx);
+        play('bigExplode', this.combat.volumeAt(f.x, f.y));
+        hud.briefing = f instanceof Generator ? 'A generator is down!' : 'A convoy truck was destroyed!';
+        this.briefingUntil = this.elapsed + 3;
+        this.rebuildBodies();
+      }
+    }
+    // Enemies near a friendly unit (and every attack-wave unit) go after it.
+    this.objectiveTimer -= dt;
+    if (this.objectiveTimer <= 0) {
+      this.objectiveTimer = 0.5;
+      for (const e of this.enemies) {
+        if (!e.alive || e instanceof Structure || e instanceof Truck) continue;
+        let best: FriendlyUnit | null = null;
+        let bestD = e.wave ? Infinity : e.def.detectRange;
+        for (const f of this.friendlies) {
+          if (!f.alive || (f instanceof ConvoyTruck && f.arrived)) continue;
+          const d = Math.hypot(f.x - e.x, f.y - e.y);
+          if (d < bestD) {
+            bestD = d;
+            best = f;
+          }
+        }
+        e.objective = best;
+      }
+    }
+    if (this.mission === 'defend') this.updateWaves(dt);
+    const alive = this.friendlies.filter((f) => f.alive).length;
+    if (this.mission === 'defend') {
+      hud.objectiveLabel = this.waveIndex < this.wavesTotal ? `Defend · wave ${this.waveIndex}/${this.wavesTotal} next in ${Math.ceil(this.waveTimer)}s · generators` : `Defend · final wave · generators`;
+      hud.objectiveDone = alive;
+      hud.objectiveTotal = this.friendlies.length;
+    } else {
+      hud.objectiveLabel = 'Escort · trucks across';
+      hud.objectiveDone = this.friendlies.filter((f) => (f as ConvoyTruck).arrived).length;
+      hud.objectiveTotal = this.required;
+    }
+  }
+
+  /** Defend: send in the next wave when its timer runs out (or soon after the last one is beaten). */
+  private updateWaves(dt: number): void {
+    if (this.waveIndex >= this.wavesTotal) return;
+    this.waveTimer -= dt;
+    const waveAlive = this.enemies.some((e) => e.wave && e.alive);
+    if (!waveAlive && this.waveIndex > 0) this.waveTimer = Math.min(this.waveTimer, DEFEND.breather);
+    if (this.waveTimer > 0) return;
+    const i = this.waveIndex++;
+    this.waveTimer = DEFEND.interval;
+    const d = this.map.defense!;
+    const from = d.waveSpawns[i % d.waveSpawns.length];
+    const army = this.config.contract.enemyFaction ? FACTIONS[this.config.contract.enemyFaction].army : null;
+    const tankTypes = army?.tankTypes ?? DESTROY_TARGETS.tankTypes;
+    const count = Math.max(2, Math.round((DEFEND.waveBase + DEFEND.perWave * i) * this.config.enemyCount));
+    const types: string[] = [];
+    for (let k = 0; k < count; k++) types.push(pickByWeight(tankTypes));
+    // Enemy mechs join the last waves, drone flights the middle ones.
+    if (this.pendingMechs.length && i >= this.wavesTotal - this.pendingMechs.length) types.push(this.pendingMechs.shift()!);
+    if (this.pendingDroneFlights > 0 && i >= 1) {
+      this.pendingDroneFlights--;
+      for (let k = 0; k < 2 + Math.floor(Math.random() * 2); k++) types.push(DESTROY_TARGETS.droneType);
+    }
+    types.forEach((type, k) => {
+      let x = from.x;
+      let y = from.y;
+      for (let tries = 0; tries < 12; tries++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = 40 + k * 18 + tries * 20;
+        x = Math.max(60, Math.min(this.map.width - 60, from.x + Math.cos(a) * r));
+        y = Math.max(60, Math.min(this.map.height - 60, from.y + Math.sin(a) * r));
+        if (!this.world.circleBlocked(x, y, 45)) break;
+      }
+      const e = createEnemy(this, type, x, y, Math.atan2(d.center.y - y, d.center.x - x), { x: d.center.x, y: d.center.y }, this.armySkin);
+      e.wave = true;
+      e.engaged = true;
+      this.enemies.push(e);
+      this.units.push(e);
+    });
+    this.rebuildBodies();
+    const side = from.y < this.map.height * 0.1 ? 'north' : from.x < this.map.width / 2 ? 'west' : 'east';
+    hud.briefing = `Wave ${i + 1} of ${this.wavesTotal} incoming from the ${side}.`;
+    this.briefingUntil = this.elapsed + 3.5;
+    play('warn', 1);
+  }
+
+  /** Defend / escort: decided yet? */
+  private friendlyMissionResult(): 'won' | 'lost' | null {
+    const alive = this.friendlies.filter((f) => f.alive);
+    if (this.mission === 'defend') {
+      if (alive.length < this.required) return 'lost';
+      if (this.waveIndex >= this.wavesTotal && !this.enemies.some((e) => e.wave && e.alive)) return 'won';
+      return null;
+    }
+    const arrived = alive.filter((f) => (f as ConvoyTruck).arrived).length;
+    if (alive.length < this.required) return 'lost';
+    if (arrived === alive.length && arrived >= this.required) return 'won';
+    return null;
   }
 
   private objectivesDone(): number {
@@ -504,6 +654,9 @@ export class MapScene extends Phaser.Scene {
       case 'fast':
         if (this.elapsed > (b.seconds ?? 0)) return 'failed';
         return this.state === 'won' ? 'done' : 'open';
+      case 'allSaved':
+        if (this.friendlies.some((f) => !f.alive)) return 'failed';
+        return this.state === 'won' ? 'done' : 'open';
       case 'intact':
         if (this.sectionLost || SECTIONS.some((sec) => p.sections.destroyed(sec))) return 'failed';
         return this.state === 'won' ? 'done' : 'open';
@@ -514,6 +667,10 @@ export class MapScene extends Phaser.Scene {
 
   /** Dev: destroy every target; pressed again once evac is open, finishes the mission. */
   devWin(): void {
+    if ((this.mission === 'defend' || this.mission === 'escort') && this.state === 'active') {
+      this.state = 'won';
+      return;
+    }
     if (this.evac && this.state === 'active') {
       this.state = 'won';
       return;
@@ -556,6 +713,15 @@ export class MapScene extends Phaser.Scene {
   private aceIntel: Vec | null = null;
   private pingTimer = 0;
   private pingImg?: Phaser.GameObjects.Image;
+  /** Your side's units on defend/escort missions (generators, convoy trucks). */
+  private friendlies: FriendlyUnit[] = [];
+  private deadFriendlies = new Set<FriendlyUnit>();
+  private objectiveTimer = 0;
+  private wavesTotal = 0;
+  private waveIndex = 0;
+  private waveTimer = 0;
+  private pendingMechs: string[] = [];
+  private pendingDroneFlights = 0;
 
   devToggleInvulnerable(): boolean {
     this.player.invulnerable = !this.player.invulnerable;
@@ -653,13 +819,14 @@ export class MapScene extends Phaser.Scene {
     this.bodies.length = 0;
     if (this.player?.alive) this.bodies.push(this.player);
     for (const e of this.enemies) if (e.alive && !e.flying) this.bodies.push(e);
+    for (const f of this.friendlies) if (f.alive && !(f instanceof ConvoyTruck && f.arrived)) this.bodies.push(f);
   }
 
   private updateMission(dt: number): void {
     const p = this.player;
     if (this.state === 'active') {
       const done = this.objectivesDone();
-      hud.objectiveDone = done;
+      if (this.friendlies.length === 0) hud.objectiveDone = done;
       if (!p.alive) {
         if (this.dropTimer === 0) {
           // Just destroyed: explode, then drop the next backup or fail.
@@ -675,6 +842,14 @@ export class MapScene extends Phaser.Scene {
           }
         } else if ((this.dropTimer -= dt) <= 0) {
           this.dropBackup();
+        }
+      } else if (this.mission === 'defend' || this.mission === 'escort') {
+        const result = this.friendlyMissionResult();
+        if (result) {
+          this.state = result;
+          hud.briefing = result === 'won' ? (this.mission === 'defend' ? 'Attack repelled. Contract complete.' : 'Convoy through. Contract complete.') : this.mission === 'defend' ? 'The generators are lost. Contract failed.' : 'Too many trucks lost. Contract failed.';
+          this.briefingUntil = this.elapsed + 5;
+          play('ui', 1);
         }
       } else if (done >= this.required && !this.evac) {
         this.openEvac();
@@ -708,8 +883,13 @@ export class MapScene extends Phaser.Scene {
         bonusAchieved: this.state === 'won' && this.bonusState() === 'done',
         time: this.elapsed,
         kills: this.kills,
-        targetsDestroyed: this.objectivesDone(),
-        targetsTotal: this.objectives.length,
+        targetsDestroyed:
+          this.mission === 'defend'
+            ? this.friendlies.filter((f) => f.alive).length
+            : this.mission === 'escort'
+              ? this.friendlies.filter((f) => (f as ConvoyTruck).arrived).length
+              : this.objectivesDone(),
+        targetsTotal: this.friendlies.length || this.objectives.length,
         damageDealt: this.damageDealt,
         damageTaken: sum((m) => m.stats.damageTaken),
         shots: sum((m) => m.stats.shots),
@@ -964,7 +1144,14 @@ export class MapScene extends Phaser.Scene {
     if (this.elapsed > this.briefingUntil) hud.briefing = '';
     if (this.evac) hud.targets.push(this.evac);
     else if (this.aceIntel) hud.targets.push(this.aceIntel);
-    else if (this.mission === 'raid') {
+    else if (this.mission === 'defend') {
+      for (const g of this.friendlies) if (g.alive) hud.targets.push(g);
+    } else if (this.mission === 'escort') {
+      let nearest: FriendlyUnit | null = null;
+      for (const t of this.friendlies) if (t.alive && !(t as ConvoyTruck).arrived && (!nearest || Math.hypot(t.x - p.x, t.y - p.y) < Math.hypot(nearest.x - p.x, nearest.y - p.y))) nearest = t;
+      if (nearest) hud.targets.push(nearest);
+      if (this.map.convoy) hud.targets.push(this.map.convoy.end);
+    } else if (this.mission === 'raid') {
       let nearest: Enemy | null = null;
       for (const o of this.objectives) if (o.alive && (!nearest || Math.hypot(o.x - p.x, o.y - p.y) < Math.hypot(nearest.x - p.x, nearest.y - p.y))) nearest = o;
       if (nearest) hud.targets.push(nearest);
@@ -1103,4 +1290,11 @@ function pointAlong(points: Vec[], d: number): { x: number; y: number; angle: nu
     d -= len;
   }
   return { x: points[0].x, y: points[0].y, angle: 0 };
+}
+
+/** Pick a type from a weighted list (Math.random: waves don't need to be replayable). */
+function pickByWeight(items: readonly { type: string; weight: number }[]): string {
+  let r = Math.random() * items.reduce((t, i) => t + i.weight, 0);
+  for (const i of items) if ((r -= i.weight) <= 0) return i.type;
+  return items[0].type;
 }

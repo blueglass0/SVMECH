@@ -4,11 +4,10 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 
 ## Current milestone
 
-**Milestone 10 part 1 — Mech hunt, convoy raid, large maps: built, awaiting the user's
-playtest**, together with the M9 feedback changes (open market, faction mechs, army weapon
-themes, stronger missiles, dev reputation buttons). M1–M9 played. Next: M10 part 2 (defend and
-escort: friendly units the enemy attacks, which needs the AI to target things other than the
-player), then 11 (polish).
+**Milestone 10 (both parts) — Mech hunt, convoy raid, defend, escort, large maps: built,
+awaiting the user's playtest** (part 1 is being tested; part 2 added defend and escort). M1–M9
+played. Next by plan: 11 (polish: difficulty menu, tutorial, sound pass, menu and phone UI pass
+incl. the crowded right-stick buttons, performance check).
 Deferred by the user: line-of-sight shadow rendering (logic already hides enemies behind
 walls); revisit as a graphics option, likely in M11.
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
@@ -357,6 +356,29 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   nearest truck. Road length ~2200 (standard) / ~3500 (large).
 - MapScene: `objectives` (uplinks / ace / trucks), `required`, `escaped`; `setupObjectives`,
   `updateObjectives`, `objectivesDone`. Dev "Win mission" kills every objective.
+
+## Defend and escort notes (M10 part 2)
+
+- Enemy AI is foe-generic: `Enemy.foe` (the player, or `Enemy.objective`, a friendly `Foe` =
+  `Unit & {vx, vy}`). `sense()` prefers the player whenever it can see them, else goes for its
+  objective (always known, always engaged). Gunner, Tank, Drone and EnemyMech aim at `foe`.
+  `MapScene.updateFriendlies` re-assigns objectives every 0.5 s: wave units → nearest living
+  friendly anywhere; everyone else → nearest friendly within its detect range (so ambushers and
+  turrets fire on a passing convoy).
+- `units/Friendly.ts`: `FriendlyUnit` (team 'player', hp bar, always visible, in `units` and
+  `bodies`), `Generator` (700 HP), `ConvoyTruck` (260 HP, 48 u/s, drives the road only while the
+  player is within 550 of a truck, keeps 95 spacing, `arrived` at the end). Art: `generator`,
+  `truck-ally` (`-ally` palette = the player's colours).
+- Defend (`DEFEND`): 3 generators 430 above the drop point; 3/4/5 waves by tier from the north,
+  west and east edges (`MissionMap.defense`); first after 18 s, then every 45 s or 8 s after a
+  wave is wiped out. Wave n has (3 + n) × enemy count ground units from the army mix; the
+  contract's mechs join the last waves, drone flights the middle ones. Win: every wave beaten
+  with ≥1 generator standing (no evac). Bonus options: no section lost, or lose no generators.
+- Escort (`ESCORT`): 3/4/5 trucks start beside the drop point and drive an A* road to the far
+  edge past 3 ambush sites (turrets, guards, the contract's mechs and drones). Win when every
+  surviving truck has arrived and at least 60% (rounded) made it. Bonus: every truck arrives.
+- Validated 240 maps (defend/escort × standard/large): generators, wave paths and roads all
+  reachable. Logic 0.1–0.35 ms/frame in tests.
 
 ## Conventions
 

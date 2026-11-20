@@ -24,6 +24,9 @@ export interface AiContext {
 
 export type Detection = 'visible' | 'radar' | 'hidden';
 
+/** Something an enemy can fight: the player's mech, or a friendly unit (defend/escort missions). */
+export type Foe = Unit & { vx: number; vy: number };
+
 /** How often enemies re-check whether they can see the player, seconds. */
 const SENSE_INTERVAL = 0.25;
 /** After losing sight this long (and reaching the last seen spot), enemies give up the chase. */
@@ -43,6 +46,15 @@ export abstract class Enemy implements Unit {
   canSee = false;
   /** Flies over terrain and units (drones): doesn't block movement. */
   flying = false;
+  /** What it is fighting right now: the player, or its objective. */
+  foe!: Foe;
+  /**
+   * A friendly unit it is after (generators on defend, convoy trucks on escort). Set by the map
+   * scene; the player still takes priority whenever this unit can see them.
+   */
+  objective: Foe | null = null;
+  /** Spawned by a defend-mission attack wave. */
+  wave = false;
   protected senseTimer = Math.random() * SENSE_INTERVAL;
   protected lostTimer = 0;
   protected lastSeen: Vec = { x: 0, y: 0 };
@@ -155,8 +167,13 @@ export abstract class Enemy implements Unit {
       .setDisplaySize(Math.max(1, BAR_WIDTH * (this.hp / this.maxHp)), 4);
   }
 
-  /** Line-of-sight check against the player, throttled. */
+  /**
+   * Line-of-sight checks, throttled. The player comes first; failing that, a unit with an
+   * objective goes after it (it always knows where it is); otherwise it hunts the player's
+   * last known position.
+   */
   protected sense(dt: number, ctx: AiContext): void {
+    this.foe ??= ctx.player;
     this.senseTimer -= dt;
     if (this.senseTimer > 0) return;
     this.senseTimer = SENSE_INTERVAL;
@@ -164,20 +181,34 @@ export abstract class Enemy implements Unit {
     const d = Math.hypot(p.x - this.x, p.y - this.y);
     // Already-engaged units keep tracking a bit beyond detection range.
     const range = this.def.detectRange * (this.engaged ? 1.3 : 1);
-    this.canSee = p.alive && d <= range && ctx.world.lineOfSight(this.x, this.y, p.x, p.y);
-    if (this.canSee) {
-      this.engaged = true;
-      this.lostTimer = 0;
-      this.lastSeen.x = p.x;
-      this.lastSeen.y = p.y;
-    } else if (this.engaged) {
-      this.lostTimer += SENSE_INTERVAL;
+    const seePlayer = p.alive && d <= range && ctx.world.lineOfSight(this.x, this.y, p.x, p.y);
+    const o = this.objective;
+    if (seePlayer || !o || !o.alive) {
+      this.foe = p;
+      this.canSee = seePlayer;
+      if (seePlayer) {
+        this.engaged = true;
+        this.lostTimer = 0;
+        this.lastSeen.x = p.x;
+        this.lastSeen.y = p.y;
+      } else if (this.engaged) {
+        this.lostTimer += SENSE_INTERVAL;
+      }
+      if (!p.alive) this.engaged = false;
+      return;
     }
-    if (!p.alive) this.engaged = false;
+    // Going for the objective: always engaged, always knows where it is.
+    this.foe = o;
+    this.engaged = true;
+    this.lostTimer = 0;
+    this.lastSeen.x = o.x;
+    this.lastSeen.y = o.y;
+    const od = Math.hypot(o.x - this.x, o.y - this.y);
+    this.canSee = od <= Math.max(range, 600) + o.radius && ctx.world.lineOfSight(this.x, this.y, o.x, o.y);
   }
 
   /** Angle to aim at the player, leading a moving target by `aimLead`. */
-  protected aimAngle(fromX: number, fromY: number, w: WeaponDef, p: Mech): number {
+  protected aimAngle(fromX: number, fromY: number, w: WeaponDef, p: Foe): number {
     const d = Math.hypot(p.x - fromX, p.y - fromY);
     const t = w.projectileSpeed > 0 ? d / w.projectileSpeed : 0;
     const lead = this.def.aimLead ?? 0;
@@ -198,7 +229,7 @@ export abstract class Gunner extends Enemy {
   }
 
   /** Distance to where the shot is aimed (the led target point): splash shells burst there. */
-  protected aimDistance(p: Mech): number {
+  protected aimDistance(p: Foe): number {
     const d = Math.hypot(p.x - this.x, p.y - this.y);
     if (this.weapon.projectileSpeed <= 0) return d;
     const t = d / this.weapon.projectileSpeed;
@@ -208,12 +239,12 @@ export abstract class Gunner extends Enemy {
 
   /** Turn the gun toward the player (or `idleAngle`) and fire when lined up. */
   protected aimAndFire(dt: number, ctx: AiContext, idleAngle: number, muzzle: number): void {
-    const p = ctx.player;
+    const p = this.foe ?? ctx.player;
     const want = this.engaged && p.alive ? this.aimAngle(this.x, this.y, this.weapon, p) : idleAngle;
     this.gunAngle = wrapAngle(approachAngle(this.gunAngle, want, (this.def.turretTurnRate ?? 90) * DEG * dt));
     this.cooldown = Math.max(0, this.cooldown - dt);
     if (!this.canSee || this.cooldown > 0) return;
-    const d = Math.hypot(p.x - this.x, p.y - this.y);
+    const d = Math.hypot(p.x - this.x, p.y - this.y) - (p === ctx.player ? 0 : p.radius);
     if (d > this.weapon.range || Math.abs(wrapAngle(want - this.gunAngle)) > 6 * DEG) return;
     const mx = this.x + Math.cos(this.gunAngle) * muzzle;
     const my = this.y + Math.sin(this.gunAngle) * muzzle;

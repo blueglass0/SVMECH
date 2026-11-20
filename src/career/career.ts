@@ -1,9 +1,9 @@
 import { CHASSIS, CHASSIS_ORDER, type Section } from '../data/chassis';
 import { COMBAT_DIFFICULTY } from '../data/difficulty';
-import { CONTRACT_FLAVOR, ECONOMY, ECONOMY_DIFFICULTY, HUNT_FLAVOR, RAID_FLAVOR } from '../data/economy';
+import { CONTRACT_FLAVOR, DEFEND_FLAVOR, ECONOMY, ECONOMY_DIFFICULTY, ESCORT_FLAVOR, HUNT_FLAVOR, RAID_FLAVOR } from '../data/economy';
 import { FACTIONS, FACTION_ORDER, OPEN_MARKET, REPUTATION, type FactionId } from '../data/factions';
 import { STARTER_LOADOUT } from '../data/loadouts';
-import { DESTROY_TARGETS, HUNT, MAP_SIZES, MISSION_TYPES, RAID, type MapSize, type MissionType } from '../data/missions';
+import { DEFEND, DESTROY_TARGETS, ESCORT, HUNT, MAP_SIZES, MISSION_TYPES, RAID, type MapSize, type MissionType } from '../data/missions';
 import { ENEMIES } from '../data/enemies';
 import { WEAPONS } from '../data/weapons';
 import { EQUIPMENT } from '../data/equipment';
@@ -437,8 +437,8 @@ function makeContract(s: CareerState): Contract {
   const aceTypes = FACTIONS[enemyFaction].army.mechTypes[3];
   const ace = mission === 'hunt' ? pick(aceTypes).type : undefined;
   const aceName = mission === 'hunt' ? pick(HUNT.callsigns) : undefined;
-  const targets = mission === 'destroy' ? t.targets : mission === 'hunt' ? 1 : RAID.trucks[tier];
-  const flavors = mission === 'hunt' ? HUNT_FLAVOR : mission === 'raid' ? RAID_FLAVOR : CONTRACT_FLAVOR;
+  const targets = { destroy: t.targets, hunt: 1, raid: RAID.trucks[tier], defend: DEFEND.generators, escort: ESCORT.trucks[tier] }[mission];
+  const flavors = { destroy: CONTRACT_FLAVOR, hunt: HUNT_FLAVOR, raid: RAID_FLAVOR, defend: DEFEND_FLAVOR, escort: ESCORT_FLAVOR }[mission];
   const limited = Math.random() < ECONOMY.tonnageLimitChance;
   const maxTonnage = limited ? pick(ECONOMY.tonnageLimits) : undefined;
   const base = (t.payout[0] + Math.random() * (t.payout[1] - t.payout[0])) * econ(s).payouts;
@@ -460,7 +460,7 @@ function makeContract(s: CareerState): Contract {
     aceName,
     targets,
     payout,
-    bonus: makeBonus(mission === 'destroy' ? t.targets : t.targets + (mapSize === 'large' ? 1 : 0)),
+    bonus: makeBonus(mission === 'destroy' ? t.targets : t.targets + (mapSize === 'large' ? 1 : 0), mission),
     maxTonnage,
     ...forces,
   };
@@ -580,6 +580,11 @@ function pickMission(): MissionType {
   return types.find((m) => (r -= MISSION_TYPES[m].weight) <= 0) ?? 'destroy';
 }
 
+/** Trucks that must arrive on an escort. */
+export function escortRequired(trucks: number): number {
+  return Math.max(1, Math.round(trucks * ESCORT.required));
+}
+
 /** Trucks you must destroy on a convoy raid. */
 export function raidRequired(trucks: number): number {
   return Math.max(1, Math.round(trucks * RAID.required));
@@ -592,6 +597,10 @@ export function objectiveText(k: Contract): string {
       return `hunt "${k.aceName}" (${ENEMIES[k.ace ?? '']?.name ?? 'enemy mech'})`;
     case 'raid':
       return `stop a ${k.targets}-truck convoy (${raidRequired(k.targets)} needed)`;
+    case 'defend':
+      return `hold ${k.targets} generators through ${DEFEND.waves[k.tier]} attack waves`;
+    case 'escort':
+      return `get ${escortRequired(k.targets)} of ${k.targets} trucks across`;
     default:
       return `destroy ${k.targets} uplinks`;
   }
@@ -606,10 +615,14 @@ function pickTier(): 1 | 2 | 3 {
   return 1;
 }
 
-function makeBonus(targets: number): BonusObjective {
-  const kinds: BonusObjective['kind'][] = ['turrets', 'tanks', 'fast', 'intact'];
+function makeBonus(targets: number, mission: MissionType = 'destroy'): BonusObjective {
+  // Defend has no turrets and a fixed length; escort has its own pace. They get "save them all" instead.
+  const kinds: BonusObjective['kind'][] =
+    mission === 'defend' ? ['intact', 'allSaved'] : mission === 'escort' ? ['turrets', 'intact', 'allSaved'] : ['turrets', 'tanks', 'fast', 'intact'];
   const kind = kinds[Math.floor(Math.random() * kinds.length)];
   switch (kind) {
+    case 'allSaved':
+      return { kind, label: mission === 'defend' ? 'Lose no generators' : 'Every truck arrives' };
     case 'turrets':
       return { kind, label: 'Destroy every turret' };
     case 'tanks':

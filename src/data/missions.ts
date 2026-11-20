@@ -53,7 +53,7 @@ export const DESTROY_TARGETS = {
   targetMinDistance: 1300,
 } as const;
 
-export type MissionType = 'destroy' | 'hunt' | 'raid';
+export type MissionType = 'destroy' | 'hunt' | 'raid' | 'defend' | 'escort';
 export type MapSize = 'standard' | 'large';
 
 /**
@@ -64,6 +64,46 @@ export const MISSION_TYPES: Record<MissionType, { name: string; weight: number; 
   destroy: { name: 'Destroy targets', weight: 5, payMult: 1, noun: 'uplinks' },
   hunt: { name: 'Mech hunt', weight: 2.5, payMult: 1.15, noun: 'target' },
   raid: { name: 'Convoy raid', weight: 2.5, payMult: 1.1, noun: 'trucks' },
+  defend: { name: 'Defend', weight: 2.5, payMult: 1.1, noun: 'generators' },
+  escort: { name: 'Escort', weight: 2.5, payMult: 1.1, noun: 'trucks' },
+};
+
+/**
+ * Defend: hold a base of generators near the drop point against attack waves from the far
+ * edges. Win by beating every wave with at least `required` generators standing.
+ */
+export const DEFEND = {
+  generators: 3,
+  generatorHp: 700,
+  required: 1,
+  waves: { 1: 3, 2: 4, 3: 5 } as Record<1 | 2 | 3, number>,
+  /** Seconds before the first wave, and between waves (a wave also comes early once the last is beaten). */
+  firstWave: 18,
+  interval: 45,
+  /** Pause after a wave is wiped out before the next one comes early. */
+  breather: 8,
+  /** Ground units in wave n (from 0): base + perWave × n, times the combat difficulty and army count. */
+  waveBase: 3,
+  perWave: 1,
+  /** How far the base sits above the drop point. */
+  baseOffset: 430,
+};
+
+/**
+ * Escort: friendly trucks drive a road from near the drop point to the far edge, through
+ * ambush points. They only move while you stay close. Win when enough of them arrive.
+ */
+export const ESCORT = {
+  trucks: { 1: 3, 2: 4, 3: 5 } as Record<1 | 2 | 3, number>,
+  truckHp: 260,
+  speed: 48,
+  /** Share of the trucks that must arrive (rounded). */
+  required: 0.6,
+  /** The convoy waits unless your mech is within this distance of a truck. */
+  stayWithin: 550,
+  /** Ambush points along the road (turrets, guards, the contract's mechs). */
+  ambushes: 3,
+  spacing: 95,
 };
 
 /** Map sizes: large maps are 1.375x wider and taller (about 1.9x the area, obstacles scale with it). */

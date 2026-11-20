@@ -20,7 +20,7 @@ export interface MechState {
   destroyed: boolean;
 }
 
-export type BonusKind = 'turrets' | 'tanks' | 'fast' | 'intact';
+export type BonusKind = 'turrets' | 'tanks' | 'fast' | 'intact' | 'allSaved';
 
 export interface BonusObjective {
   kind: BonusKind;
