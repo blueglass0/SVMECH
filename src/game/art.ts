@@ -18,6 +18,22 @@ const C = {
   canopy: 0x1c2329,
 };
 
+/** Enemy mechs: rust red armour with a hostile red accent. */
+const ENEMY_MECH = {
+  hull: 0x6e4a45,
+  hullDark: 0x48302d,
+  edge: 0xb88a80,
+  accent: 0xff5a4f,
+  canopy: 0x1c1416,
+};
+const WRECK_MECH = {
+  hull: 0x34383b,
+  hullDark: 0x232628,
+  edge: 0x4a5055,
+  accent: 0x3b3f42,
+  canopy: 0x161819,
+};
+
 type Draw = (g: Phaser.GameObjects.Graphics) => void;
 
 function bake(scene: Phaser.Scene, key: string, w: number, h: number, draw: Draw, scale = ART_SCALE): void {
@@ -32,28 +48,6 @@ function bake(scene: Phaser.Scene, key: string, w: number, h: number, draw: Draw
 }
 
 export function bakeArt(scene: Phaser.Scene): void {
-  // Foot: a long pad with three forward talons, so walking direction reads at a glance.
-  bake(scene, 'mech-foot', 44, 22, (g) => {
-    g.fillStyle(C.hull);
-    for (const ty of [-6, 0, 6]) {
-      g.beginPath();
-      g.moveTo(8, ty - 2.5);
-      g.lineTo(20, ty);
-      g.lineTo(8, ty + 2.5);
-      g.closePath();
-      g.fillPath();
-    }
-    g.fillStyle(C.hullDark).fillRoundedRect(-16, -8, 26, 16, 4);
-    g.lineStyle(1.5, C.edge, 0.8).strokeRoundedRect(-16, -8, 26, 16, 4);
-    g.fillStyle(C.hull).fillRect(-14, -3, 5, 6);
-  });
-
-  // Hips: crossbar joining the legs.
-  bake(scene, 'mech-hips', 22, 56, (g) => {
-    g.fillStyle(C.hullDark).fillRoundedRect(-7, -26, 14, 52, 5);
-    g.lineStyle(1.5, C.edge, 0.6).strokeRoundedRect(-7, -26, 14, 52, 5);
-  });
-
   // Leg heading marker on the ground: where the legs are walking (the torso marker is orange).
   bake(scene, 'leg-tick', 24, 28, (g) => {
     g.fillStyle(0xd6dde3, 0.7);
@@ -66,38 +60,69 @@ export function bakeArt(scene: Phaser.Scene): void {
     g.fillPath();
   });
 
-  // Torso: armoured body, two arm pods with guns pointing forward, cockpit, accent stripe.
-  // Arm (one texture, used for both sides): pod with a forward barrel. Separate from the body so it can be shot off.
-  bake(scene, 'mech-arm', 76, 22, (g) => {
-    g.fillStyle(C.hullDark).fillRect(14, -3, 22, 6);
-    g.fillStyle(C.hull).fillRoundedRect(-14, -9, 30, 18, 4);
-    g.lineStyle(1.5, C.edge, 0.8).strokeRoundedRect(-14, -9, 30, 18, 4);
-  });
-  // Torn-off arm stump.
-  bake(scene, 'mech-arm-stub', 76, 22, (g) => {
-    g.fillStyle(0x2a2f33).fillRoundedRect(-10, -7, 12, 14, 3);
-    g.lineStyle(1.5, 0xff7a3d, 0.9).lineBetween(2, -6, 2, 6);
-  });
+  // Mech parts in three colour sets: the player's, enemy mechs, and wrecks (no tint in Canvas mode).
+  for (const [suffix, P] of [
+    ['', C],
+    ['-enemy', ENEMY_MECH],
+    ['-wreck', WRECK_MECH],
+  ] as const) {
+    // Foot: a long pad with three forward talons, so walking direction reads at a glance.
+    bake(scene, 'mech-foot' + suffix, 44, 22, (g) => {
+      g.fillStyle(P.hull);
+      for (const ty of [-6, 0, 6]) {
+        g.beginPath();
+        g.moveTo(8, ty - 2.5);
+        g.lineTo(20, ty);
+        g.lineTo(8, ty + 2.5);
+        g.closePath();
+        g.fillPath();
+      }
+      g.fillStyle(P.hullDark).fillRoundedRect(-16, -8, 26, 16, 4);
+      g.lineStyle(1.5, P.edge, 0.8).strokeRoundedRect(-16, -8, 26, 16, 4);
+      g.fillStyle(P.hull).fillRect(-14, -3, 5, 6);
+    });
 
-  bake(scene, 'mech-torso', 76, 72, (g) => {
-    // Body.
-    g.fillStyle(C.hull);
-    g.beginPath();
-    g.moveTo(-20, -17);
-    g.lineTo(10, -19);
-    g.lineTo(22, -8);
-    g.lineTo(22, 8);
-    g.lineTo(10, 19);
-    g.lineTo(-20, 17);
-    g.closePath();
-    g.fillPath();
-    g.lineStyle(2, C.edge, 1).strokePath();
-    // Cockpit.
-    g.fillStyle(C.canopy).fillRoundedRect(4, -7, 13, 14, 3);
-    g.lineStyle(1.5, C.accent, 1).strokeRoundedRect(4, -7, 13, 14, 3);
-    // Back plate stripe.
-    g.fillStyle(C.accent).fillRect(-17, -10, 4, 20);
-  });
+    // Hips: crossbar joining the legs.
+    bake(scene, 'mech-hips' + suffix, 22, 56, (g) => {
+      g.fillStyle(P.hullDark).fillRoundedRect(-7, -26, 14, 52, 5);
+      g.lineStyle(1.5, P.edge, 0.6).strokeRoundedRect(-7, -26, 14, 52, 5);
+    });
+
+    // Torso: armoured body, two arm pods with guns pointing forward, cockpit, accent stripe.
+    // Arm (one texture, used for both sides): pod with a forward barrel. Separate from the body so it can be shot off.
+    bake(scene, 'mech-arm' + suffix, 76, 22, (g) => {
+      g.fillStyle(P.hullDark).fillRect(14, -3, 22, 6);
+      g.fillStyle(P.hull).fillRoundedRect(-14, -9, 30, 18, 4);
+      g.lineStyle(1.5, P.edge, 0.8).strokeRoundedRect(-14, -9, 30, 18, 4);
+    });
+    // Torn-off arm stump.
+    if (suffix === '') {
+      bake(scene, 'mech-arm-stub', 76, 22, (g) => {
+        g.fillStyle(0x2a2f33).fillRoundedRect(-10, -7, 12, 14, 3);
+        g.lineStyle(1.5, 0xff7a3d, 0.9).lineBetween(2, -6, 2, 6);
+      });
+    }
+
+    bake(scene, 'mech-torso' + suffix, 76, 72, (g) => {
+      // Body.
+      g.fillStyle(P.hull);
+      g.beginPath();
+      g.moveTo(-20, -17);
+      g.lineTo(10, -19);
+      g.lineTo(22, -8);
+      g.lineTo(22, 8);
+      g.lineTo(10, 19);
+      g.lineTo(-20, 17);
+      g.closePath();
+      g.fillPath();
+      g.lineStyle(2, P.edge, 1).strokePath();
+      // Cockpit.
+      g.fillStyle(P.canopy).fillRoundedRect(4, -7, 13, 14, 3);
+      g.lineStyle(1.5, P.accent, 1).strokeRoundedRect(4, -7, 13, 14, 3);
+      // Back plate stripe.
+      g.fillStyle(P.accent).fillRect(-17, -10, 4, 20);
+    });
+  }
 
   // Torso facing marker: a small chevron.
   bake(scene, 'aim-chevron', 24, 24, (g) => {
@@ -268,6 +293,40 @@ export function bakeCombatArt(scene: Phaser.Scene): void {
     g.fillStyle(0x7fe6ff, 0.55).fillRect(-32, -4.5, 64, 9);
     g.fillStyle(0xffffff, 1).fillRect(-32, -1.75, 64, 3.5);
   });
+  // Enemy beams: red instead of cyan/green.
+  bake(scene, 'beam-enemy', 64, 12, (g) => {
+    g.fillStyle(0xff4a3d, 0.25).fillRect(-32, -5, 64, 10);
+    g.fillStyle(0xff8a7a, 0.6).fillRect(-32, -2.5, 64, 5);
+    g.fillStyle(0xfff0ec, 1).fillRect(-32, -1, 64, 2);
+  });
+  bake(scene, 'beam-pulse-enemy', 64, 8, (g) => {
+    g.fillStyle(0xff7a3d, 0.3).fillRect(-32, -3, 64, 6);
+    g.fillStyle(0xffe4d8, 1).fillRect(-32, -1, 64, 2);
+  });
+  bake(scene, 'beam-large-enemy', 64, 18, (g) => {
+    g.fillStyle(0xff4a3d, 0.2).fillRect(-32, -8, 64, 16);
+    g.fillStyle(0xff8a7a, 0.55).fillRect(-32, -4.5, 64, 9);
+    g.fillStyle(0xffffff, 1).fillRect(-32, -1.75, 64, 3.5);
+  });
+  // Drones: a small four-rotor craft (facing +x), its shadow on the ground, and a wreck.
+  const drone = (key: string, body: number, rotor: number, light: number) =>
+    bake(scene, key, 40, 40, (g) => {
+      g.lineStyle(3, body, 1);
+      for (const [x, y] of [[10, -10], [10, 10], [-10, -10], [-10, 10]]) g.lineBetween(0, 0, x, y);
+      g.fillStyle(rotor, 0.45);
+      for (const [x, y] of [[10, -10], [10, 10], [-10, -10], [-10, 10]]) g.fillCircle(x, y, 7);
+      g.lineStyle(1, rotor, 0.9);
+      for (const [x, y] of [[10, -10], [10, 10], [-10, -10], [-10, 10]]) g.strokeCircle(x, y, 7);
+      g.fillStyle(body).fillRoundedRect(-7, -5, 15, 10, 3);
+      g.fillStyle(0x2a1e1c).fillRect(6, -1.5, 8, 3);
+      g.fillStyle(light).fillCircle(3, 0, 2.2);
+    });
+  drone('drone', 0x7a4f48, 0xc9a49c, 0xff5a4f);
+  drone('drone-wreck', 0x2c2f31, 0x3c4144, 0x3b3f42);
+  bake(scene, 'drone-shadow', 40, 40, (g) => {
+    g.fillStyle(0x000000, 0.3).fillCircle(0, 0, 14);
+  });
+
   // Lightning: a few jagged variants, picked at random per arc.
   for (let v = 0; v < 3; v++) {
     bake(scene, `arc-${v}`, 64, 16, (g) => {

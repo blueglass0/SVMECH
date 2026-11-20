@@ -194,6 +194,7 @@ export class App {
           h('div', { class: 'card-title' }, `${k.employer}`),
           h('div', { class: 'muted small' }, `vs ${k.enemy} · destroy ${k.targets} uplinks`),
           k.maxTonnage ? h('div', { class: 'small limit' }, `Tonnage limit: ${k.maxTonnage} t per mech`) : null,
+          C.forcesLabel(k) ? h('div', { class: 'small threat' }, `Expect: ${C.forcesLabel(k)}`) : null,
           h('div', { class: 'small bonus' }, `Bonus +${money(C.bonusPayout(k))}: ${k.bonus.label}`),
         ),
       ),
@@ -298,6 +299,7 @@ export class App {
           row('Objective', `Destroy ${k.targets} uplink towers, then reach evac`, ''),
           row('Bonus', k.bonus.label, `+${money(C.bonusPayout(k))}`),
           k.maxTonnage ? row('Tonnage limit', 'every deployed mech', `${k.maxTonnage} t`) : null,
+          C.forcesLabel(k) ? row('Intel', C.forcesLabel(k), '') : null,
         ),
       ),
       h(

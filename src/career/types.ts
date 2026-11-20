@@ -39,6 +39,9 @@ export interface Contract {
   bonus: BonusObjective;
   /** Every deployed mech must weigh at most this (loaded), if set. */
   maxTonnage?: number;
+  /** Enemy mechs on the map (EnemyDef ids) and drone flights. Missing on contracts from before milestone 8. */
+  enemyMechs?: string[];
+  droneFlights?: number;
 }
 
 export interface LoanState {

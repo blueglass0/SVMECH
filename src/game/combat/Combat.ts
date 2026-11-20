@@ -141,7 +141,7 @@ export class Combat {
       return;
     }
     if (w.delivery === 'beam') {
-      const tex = w.look === 'pulse' ? 'beam-pulse' : w.look === 'largeLaser' ? 'beam-large' : 'beam';
+      const tex = (w.look === 'pulse' ? 'beam-pulse' : w.look === 'largeLaser' ? 'beam-large' : 'beam') + (team === 'enemy' ? '-enemy' : '');
       this.fireBeam(x, y, a, w.range, damage, team, tex);
       play(w.look === 'pulse' ? 'pulse' : 'laser', volume * (w.look === 'largeLaser' ? 1.3 : 1));
       return;
@@ -214,7 +214,7 @@ export class Combat {
     if (s) {
       s.frame = this.frame;
       s.img
-        .setTexture(w.look === 'largeLaser' ? 'beam-large' : 'beam')
+        .setTexture((w.look === 'largeLaser' ? 'beam-large' : 'beam') + (team === 'enemy' ? '-enemy' : ''))
         .setPosition(x, y)
         .setRotation(a)
         .setScale(len / (BEAM_TEX_LENGTH * ART_SCALE), (0.8 + Math.random() * 0.25) / ART_SCALE)

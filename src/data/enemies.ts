@@ -1,13 +1,18 @@
+import type { Loadout } from './loadouts';
+
 /**
- * Enemy units for the faction-neutral army (milestone 3). Tanks, turrets and
- * structures have one HP bar; enemy mechs (milestone 8) will use the player's
- * systems instead. Distances in world units, time in seconds, angles in degrees.
+ * Enemy units for the faction-neutral army. Tanks, turrets, drones and
+ * structures have one HP bar; enemy mechs (milestone 8) use the player's
+ * systems: a chassis, a loadout, locational damage, heat and equipment.
+ * Distances in world units, time in seconds, angles in degrees.
  */
 export interface EnemyDef {
   id: string;
   name: string;
-  kind: 'tank' | 'turret' | 'structure';
+  kind: 'tank' | 'turret' | 'structure' | 'drone' | 'mech';
+  /** Unused for mechs (their armor comes from the chassis). */
   hp: number;
+  /** Unused for mechs (the chassis decides). */
   radius: number;
   weapon?: string;
   /** Tanks only. */
@@ -23,6 +28,27 @@ export interface EnemyDef {
   aimLead?: number;
   /** Tanks: crush terrain up to this tonnage by driving into it (see data/terrain.ts). */
   crushTonnage?: number;
+  /** Drones: circle the player at about this distance. */
+  orbitRange?: number;
+  /** Enemy mechs: what they field, and how they fight. */
+  mech?: EnemyMechDef;
+}
+
+export interface EnemyMechDef {
+  chassis: string;
+  weapons: Loadout['weapons'];
+  /** Internal equipment, including the reactor (shield and flares get used, point defense runs itself). */
+  equipment: string[];
+  /** Multiplies the chassis armor: enemy mechs are lighter-armoured than yours so fights don't drag. */
+  armorScale: number;
+  /** Multiplies weapon damage (on top of the combat difficulty). */
+  damageScale: number;
+  /** How far off their aim wanders, degrees either side. */
+  aimErrorDeg: number;
+  /** 0..1: how hard they circle you once in range (lights dance, assaults plod). */
+  strafe: number;
+  /** Seconds after spotting you before they open fire. */
+  reaction: number;
 }
 
 export const ENEMIES: Record<string, EnemyDef> = {
@@ -87,5 +113,121 @@ export const ENEMIES: Record<string, EnemyDef> = {
     hp: 380,
     radius: 38,
     detectRange: 0,
+  },
+
+  // --- Milestone 8: drones and enemy mechs ---
+  drone: {
+    id: 'drone',
+    name: 'Attack drone',
+    kind: 'drone',
+    hp: 40,
+    radius: 14,
+    weapon: 'droneGun',
+    speed: 190,
+    accel: 260,
+    turretTurnRate: 240,
+    detectRange: 650,
+    orbitRange: 260,
+    aimLead: 0.4,
+  },
+  raider: {
+    id: 'raider',
+    name: 'Raider (Kestrel)',
+    kind: 'mech',
+    hp: 0,
+    radius: 0,
+    detectRange: 700,
+    preferredRange: 300,
+    aimLead: 0.5,
+    mech: {
+      chassis: 'kestrel',
+      weapons: [
+        { mount: 'la-e', weapon: 'smallLaser', group: 1 },
+        { mount: 'ra-e', weapon: 'smallLaser', group: 1 },
+        { mount: 'ra-b', weapon: 'machineGun', group: 2 },
+      ],
+      equipment: ['lightReactor', 'heatSink'],
+      armorScale: 0.5,
+      damageScale: 0.4,
+      aimErrorDeg: 5,
+      strafe: 0.8,
+      reaction: 0.7,
+    },
+  },
+  trooper: {
+    id: 'trooper',
+    name: 'Trooper (Vulture)',
+    kind: 'mech',
+    hp: 0,
+    radius: 0,
+    detectRange: 680,
+    preferredRange: 400,
+    aimLead: 0.5,
+    mech: {
+      chassis: 'vulture',
+      weapons: [
+        { mount: 'la-b', weapon: 'autocannon', group: 1 },
+        { mount: 'ra-b', weapon: 'machineGun', group: 1 },
+        { mount: 'ra-e', weapon: 'laser', group: 2 },
+        { mount: 't-m', weapon: 'missilePack', group: 2 },
+      ],
+      equipment: ['standardReactor', 'heatSink', 'flareLauncher'],
+      armorScale: 0.6,
+      damageScale: 0.37,
+      aimErrorDeg: 4,
+      strafe: 0.7,
+      reaction: 0.8,
+    },
+  },
+  brawler: {
+    id: 'brawler',
+    name: 'Brawler (Condor)',
+    kind: 'mech',
+    hp: 0,
+    radius: 0,
+    detectRange: 650,
+    preferredRange: 330,
+    aimLead: 0.5,
+    mech: {
+      chassis: 'condor',
+      weapons: [
+        { mount: 'la-b', weapon: 'gatling', group: 1 },
+        { mount: 'ra-b', weapon: 'autocannon', group: 1 },
+        { mount: 'ra-e', weapon: 'beamLaser', group: 2 },
+        { mount: 't-m', weapon: 'rocketPod', group: 2 },
+      ],
+      equipment: ['standardReactor', 'heatSink', 'heatSink', 'shieldGenerator'],
+      armorScale: 0.7,
+      damageScale: 0.33,
+      aimErrorDeg: 4,
+      strafe: 0.5,
+      reaction: 0.9,
+    },
+  },
+  juggernaut: {
+    id: 'juggernaut',
+    name: 'Juggernaut (Roc)',
+    kind: 'mech',
+    hp: 0,
+    radius: 0,
+    detectRange: 650,
+    preferredRange: 450,
+    aimLead: 0.6,
+    mech: {
+      chassis: 'roc',
+      weapons: [
+        { mount: 'la-b', weapon: 'heavyCannon', group: 1 },
+        { mount: 'ra-b', weapon: 'autocannon', group: 1 },
+        { mount: 'la-e', weapon: 'largeLaser', group: 2 },
+        { mount: 'ra-e', weapon: 'laser', group: 2 },
+        { mount: 't-m', weapon: 'missilePack', group: 2 },
+      ],
+      equipment: ['assaultReactor', 'heatSink', 'heatSink', 'pointDefense'],
+      armorScale: 0.8,
+      damageScale: 0.36,
+      aimErrorDeg: 3.5,
+      strafe: 0.3,
+      reaction: 1,
+    },
   },
 };
