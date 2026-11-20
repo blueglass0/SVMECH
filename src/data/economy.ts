@@ -7,7 +7,7 @@ export const ECONOMY = {
   /** Fuel per deployment, per ton of mech. */
   fuelPerTon: 120,
   /** Price per ammo unit loaded. */
-  ammoPrice: { ballistic: 8, missile: 40 },
+  ammoPrice: { ballistic: 8, missile: 25 },
   /** Repair price per armor point. */
   repairPerArmor: 55,
   /** Repairing a destroyed section costs this much more (rebuilding it and its weapons). */

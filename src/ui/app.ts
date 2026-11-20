@@ -904,6 +904,16 @@ export class App {
 
   // ---------- Dev ----------
 
+  /** Dev: change standing with one faction (or all with null), to test faction shops. */
+  devAddRep(faction: FactionId | null, amount: number): void {
+    if (!this.career) return;
+    for (const f of faction ? [faction] : FACTION_ORDER) {
+      this.career.reputation[f] = Math.max(REPUTATION.min, Math.min(REPUTATION.max, (this.career.reputation[f] ?? 0) + amount));
+    }
+    this.save();
+    if (!this.inMission) this.showHangar();
+  }
+
   devAddMoney(amount: number): void {
     if (!this.career) return;
     this.career.money += amount;

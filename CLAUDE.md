@@ -25,6 +25,7 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
 - **Field services are expensive on purpose** (after M7 part 2): ammo 3× hangar prices, repairs
   2× (lowered after M8: heavy mechs cost too much to patch), ¢16k swap fee, so spending
   mid-mission is a real trade-off against the payout. Tune from there.
+- **Missiles buffed** (after M9): pack 11, rocket 12, rack 10 per missile; missile ammo ¢25 (was 40).
 - **Less ballistic ammo** (after M8): chassis ballistic capacity cut ~15% (Vulture 1150) so heavy
   gun builds have a reason to fit ammo bins.
 - **Map sizes** (requested after M7 part 2): some maps should be bigger. Planned with mission
@@ -312,10 +313,16 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   employers and enemy force names, a gated shop (`shop: { item, rep }`), optional open-market
   discounts (Freestars 10% at 20, 20% at 50), and an `army` style (count multiplier, tank and
   turret mix, enemy mech types per tier, extra mechs/drone flights, colour `skin`).
-- `OPEN_MARKET` items (Kestrel, Vulture, basic weapons and equipment) sell to anyone; everything
-  else belongs to one faction. `shopStatus`/`itemShopPrice`/`itemSource` in career.ts; the Shop
-  lists everything with a faction chip and the standing needed. Condor needs Royalists 20, Roc 55,
-  Shrike Freestars 20, top energy gear Technocrats 30–65: higher-end gear is a goal.
+- `OPEN_MARKET` sells to anyone: a generalist mech per weight class (Kestrel, Vulture, Condor,
+  Roc) and the common weapons (incl. Gatling, pulse/beam/large lasers). Factions sell specialised
+  kit (after M9 feedback: too much was locked): Royalists heavy cannon 20, missile rack 35, Bastion
+  (heavy cannon platform) 45; Technocrats plasma 25, Seraph (energy frame) 30, heavy beam 40,
+  assault reactor 50, shield/sensors; Freestars Jackal (fast light, 4 small mounts) 5, Shrike 20,
+  lightning 25, discounts. `shopStatus`/`itemShopPrice`/`itemSource` in career.ts.
+- Army weapon themes (user request): Royalists lean on cannons (guardsman, brawler, castellan,
+  juggernaut; cannon turrets), Freestars on machine guns (raider, harrier, Gatling skirmisher,
+  technicals, gun turrets), Technocrats on lasers (lancer, arbiter, warden).
+- Dev (Tune panel): Royalists/Technocrats/Freestars +20, all factions -20 (`App.devAddRep`).
 - Reputation (`CareerState.reputation`, -100..100, `REPUTATION`): a win gives the employer
   +6/9/13 by tier; the faction you fought loses 4/6/9 win or lose; failing costs the employer 3.
   At -30 or below a faction won't hire you or sell to you. Levels: Hostile, Neutral (-29),
