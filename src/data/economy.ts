@@ -92,6 +92,7 @@ export const SHOP_STOCK = [
   'lightning',
   'rocketPod',
   'missilePack',
+  'missileRack',
   // Equipment
   'lightReactor',
   'standardReactor',

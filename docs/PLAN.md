@@ -175,6 +175,7 @@ This is a new game project. Read docs/PLAN.md: it's the full design and build pl
 - Aim assist on phones stays light.
 - One backup mech per mission: a single extra chance (after M7).
 - Field stations (ammo, repair, swap) are single-use per station; field repair can't fix destroyed sections. Ammo costs 3× hangar prices and repairs 2× (swap fee ¢16k), so spending mid-mission is a real trade-off against the payout (raised from 1.5× after M7; repairs eased to 2× after M8).
+- Mounts are sized (small, medium, large) instead of ballistic/energy/missile: arm and torso mounts take any gun or laser up to their size, and back mounts take missiles (artillery later). Heavy weapons gravitate to heavy frames, with the odd exception like the Shrike (one large gun, nothing else). Frames make some power of their own and the reactor adds to it; the reactor has its own place in the loadout instead of using internal slots (after M8).
 - Weapons keep fixed, parallel aim from their hardpoints (no convergence). Medium and heavy enemy mechs are a little bigger than the player's versions, the Condor's and Roc's arm mounts were narrowed, and bigger tanks and turrets that are easier to hit may come later.
 - Current weapons don't need to destroy buildings faster; heavier weapons (heavy cannon, plasma) are the building-wreckers.
 

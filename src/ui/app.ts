@@ -1,12 +1,12 @@
 import type Phaser from 'phaser';
 import * as C from '../career/career';
 import type { CareerState, CombatLevel, Contract, Debrief, MissionOutcome } from '../career/types';
-import { CHASSIS, CHASSIS_ORDER, type Section } from '../data/chassis';
+import { CHASSIS, CHASSIS_ORDER, type MountDef, type MountKind, type Section } from '../data/chassis';
 import { ECONOMY, SHOP_STOCK } from '../data/economy';
 import { WEAPONS, type WeaponDef } from '../data/weapons';
 import { EQUIPMENT, type EquipmentDef } from '../data/equipment';
 import { isEquipment, isWeapon, itemName, itemPrice } from '../data/items';
-import { mechStats } from '../game/mechStats';
+import { fitsMount, mechStats } from '../game/mechStats';
 import { SECTIONS } from '../game/units/SectionDamage';
 import { play } from '../core/audio';
 import { settings, saveSettings } from '../core/settings';
@@ -52,6 +52,11 @@ export class App {
     }
     if (this.career && C.resolveInterruptedMission(this.career)) {
       this.flash = 'The last mission was interrupted and counted as a withdrawal.';
+      this.save();
+    }
+    if (this.career && C.loadNotes.length) {
+      this.flash = [this.flash, ...C.loadNotes].filter(Boolean).join(' ');
+      C.loadNotes.length = 0;
       this.save();
     }
     this.showTitle();
@@ -398,7 +403,7 @@ export class App {
       h('h3', null, 'Loadout'),
       chassis.mounts.map((mount) => {
         const installed = m.weapons.find((w) => w.mount === mount.id);
-        const options = [...new Set(c.inventory.filter((id) => WEAPONS[id]?.family === mount.type))];
+        const options = [...new Set(c.inventory.filter((id) => WEAPONS[id] && fitsMount(WEAPONS[id], mount)))];
         const select = h(
           'select',
           {
@@ -414,7 +419,7 @@ export class App {
         return h(
           'div',
           { class: 'mount-row' },
-          h('span', null, `${SECTION_NAMES[mount.section]}`, h('span', { class: `chip ${mount.type}` }, mount.type)),
+          h('span', null, mount.kind === 'back' ? 'Back' : SECTION_NAMES[mount.section], h('span', { class: `chip size-${mount.size}` }, mount.size)),
           select,
           installed
             ? h(
@@ -427,12 +432,14 @@ export class App {
             : h('span'),
         );
       }),
+      this.reactorRow(c, m),
       meter('Tonnage', st.tonnage, st.maxTonnage, 't'),
       meter('Power', st.powerDraw, st.powerOutput, ''),
       meter('Slots', st.slotsUsed, st.slots, ''),
       h(
         'div',
         { class: 'rows small' },
+        row('Power', `frame ${chassis.power} + reactor ${st.powerOutput - chassis.power}`, `${st.powerOutput}`),
         row('Heat', `capacity ${st.heatCapacity}, reactor +${st.passiveHeat}/s`, `sheds ${st.dissipation}/s`),
         row('Ammo', `${m.ammo.ballistic} rounds, ${m.ammo.missile ?? 0} missiles`, `max ${st.ammoCapacity.ballistic} / ${st.ammoCapacity.missile}`),
         row('Mech value', '', money(C.mechValue(m))),
@@ -441,13 +448,15 @@ export class App {
       h('p', { class: 'muted small' }, 'Buy weapons and equipment in the Shop; spares appear here.'),
     );
 
-    const spareEquipment = [...new Set(c.inventory.filter((id) => isEquipment(id)))];
+    const spareEquipment = [...new Set(c.inventory.filter((id) => isEquipment(id) && EQUIPMENT[id].kind !== 'reactor'))];
     const equipment = h(
       'div',
       { class: 'panel' },
       h('h3', null, `Internal equipment · ${st.slotsUsed}/${st.slots} slots`),
       m.equipment.map((id, i) =>
-        h(
+        EQUIPMENT[id].kind === 'reactor'
+          ? null
+          : h(
           'div',
           { class: 'shop-row' },
           h('div', null, h('b', null, EQUIPMENT[id].name), h('div', { class: 'muted small' }, equipmentStats(EQUIPMENT[id]))),
@@ -467,9 +476,29 @@ export class App {
             ),
             h('span'),
           )
-        : h('p', { class: 'muted small' }, 'Buy equipment in the Shop to fit it here. Installing a reactor swaps out the old one.'),
+        : h('p', { class: 'muted small' }, 'Buy equipment in the Shop to fit it here. Reactors go in the reactor row of the loadout.'),
     );
     return h('div', null, this.hangarList(c, m), h('div', { class: 'cols' }, armor, loadout, equipment));
+  }
+
+  /** The reactor sits with the weapons: pick one of yours, or none (the frame still makes some power). */
+  private reactorRow(c: CareerState, m: CareerState['mechs'][number]): HTMLElement {
+    const fitted = C.reactorOf(m);
+    const spares = [...new Set(c.inventory.filter((id) => EQUIPMENT[id]?.kind === 'reactor' && id !== fitted))];
+    const label = (id: string) => `${EQUIPMENT[id].name} · +${EQUIPMENT[id].output} power · ${EQUIPMENT[id].tonnage} t`;
+    return h(
+      'div',
+      { class: 'mount-row' },
+      h('span', null, 'Reactor'),
+      h(
+        'select',
+        { onchange: (e: Event) => this.act(() => C.setReactor(c, m, (e.target as HTMLSelectElement).value)) },
+        h('option', { value: '', selected: !fitted }, '— none —'),
+        fitted ? h('option', { value: fitted, selected: true }, label(fitted)) : null,
+        spares.map((id) => h('option', { value: id }, `${label(id)} (spare)`)),
+      ),
+      h('span'),
+    );
   }
 
   /** Every owned mech, with its role (active / backup) and status; pick one to edit. */
@@ -535,7 +564,9 @@ export class App {
           'div',
           null,
           h('b', null, itemName(id)),
-          w ? h('span', { class: `chip ${w.family}` }, w.family) : h('span', { class: 'chip' }, `${e.slots} slot${e.slots > 1 ? 's' : ''}`),
+          w
+            ? [h('span', { class: `chip ${w.family}` }, w.family), h('span', { class: `chip size-${w.size}` }, w.slot === 'back' ? `${w.size} back` : w.size)]
+            : h('span', { class: 'chip' }, e.kind === 'reactor' ? 'reactor' : `${e.slots} slot${e.slots > 1 ? 's' : ''}`),
           h('div', { class: 'muted small' }, w ? weaponStats(w) : equipmentStats(e)),
         ),
         h('button', { class: 'small-btn', disabled: cost > c.money, onclick: () => this.act(() => C.buyItem(c, id), `Bought ${itemName(id)}.`) }, `Buy ${money(cost)}`),
@@ -560,7 +591,9 @@ export class App {
             h(
               'div',
               { class: 'muted small' },
-              `speed ${ch.movement.maxSpeed} · torso ${ch.movement.torsoTurnRate}°/s · armor ${armor} · ${ch.mounts.length} hardpoints · ${ch.internalSlots} slots · vision ${ch.vision.coneDeg * 2}°`,
+              `speed ${ch.movement.maxSpeed} · torso ${ch.movement.torsoTurnRate}°/s · armor ${armor} · power ${ch.power} · ${ch.internalSlots} slots · vision ${ch.vision.coneDeg * 2}°`,
+            ),
+            h('div', { class: 'muted small' }, `Mounts: ${mountSummary(ch.mounts)}`
             ),
             h('div', { class: 'muted small' }, `Comes with: ${ch.stock.weapons.map((w) => WEAPONS[w.weapon].name).join(', ')}`),
           ),
@@ -848,6 +881,17 @@ function equipmentStats(e: EquipmentDef): string {
   parts.push(`${e.tonnage} t`);
   if (e.power) parts.push(`draws ${e.power} power`);
   return parts.join(' · ');
+}
+
+/** "arms 1 large, 2 medium · back 1 medium" style summary of a chassis' mounts. */
+function mountSummary(mounts: MountDef[]): string {
+  const part = (kind: MountKind) => {
+    const ms = mounts.filter((m) => m.kind === kind);
+    if (!ms.length) return '';
+    const counts = (['large', 'medium', 'small'] as const).map((sz) => [sz, ms.filter((m) => m.size === sz).length] as const).filter(([, n]) => n > 0);
+    return `${kind === 'back' ? 'back' : 'arm/torso'} ${counts.map(([sz, n]) => `${n} ${sz}`).join(', ')}`;
+  };
+  return [part('direct'), part('back')].filter(Boolean).join(' · ');
 }
 
 function weaponStats(w: WeaponDef): string {

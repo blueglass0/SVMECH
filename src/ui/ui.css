@@ -503,3 +503,12 @@ body.in-mission .toolbar .mission-only {
   width: 16px;
   height: 16px;
 }
+.chip.size-small {
+  color: #b9c4cc;
+}
+.chip.size-medium {
+  color: #ffc561;
+}
+.chip.size-large {
+  color: #ff9a8a;
+}

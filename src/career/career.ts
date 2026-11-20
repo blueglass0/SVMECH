@@ -7,7 +7,7 @@ import { ENEMIES } from '../data/enemies';
 import { WEAPONS } from '../data/weapons';
 import { EQUIPMENT } from '../data/equipment';
 import { itemName, itemPrice, isEquipment } from '../data/items';
-import { mechStats } from '../game/mechStats';
+import { fitsMount, mechStats } from '../game/mechStats';
 import { SECTIONS } from '../game/units/SectionDamage';
 import { randomSeed } from '../core/rng';
 import type {
@@ -31,6 +31,9 @@ const SAVE_KEY = 'steel-vulture.career.v1';
 
 // ---------- Persistence ----------
 
+/** Things changed while loading an old save, for the hangar to mention once. */
+export const loadNotes: string[] = [];
+
 export function loadCareer(): CareerState | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
@@ -48,6 +51,15 @@ export function loadCareer(): CareerState | null {
     for (const m of s.mechs) {
       // Saves from before equipment existed (M5): give the mech the starter reactor and heat sink.
       if (!m.equipment) m.equipment = [...STARTER_LOADOUT.equipment];
+      // Sized mounts (after M8): weapons that no longer fit their mount go to storage.
+      const mounts = CHASSIS[m.chassis].mounts;
+      for (const w of [...m.weapons]) {
+        const mount = mounts.find((x) => x.id === w.mount);
+        if (mount && WEAPONS[w.weapon] && fitsMount(WEAPONS[w.weapon], mount)) continue;
+        m.weapons.splice(m.weapons.indexOf(w), 1);
+        if (WEAPONS[w.weapon]) s.inventory.push(w.weapon);
+        loadNotes.push(`${WEAPONS[w.weapon]?.name ?? w.weapon} didn't fit the new ${CHASSIS[m.chassis].name} mounts and was moved to storage.`);
+      }
       normalizeMech(m);
     }
     // Boards from before enemy mechs and drones (M8) get fresh contracts that include them.
@@ -229,7 +241,7 @@ export interface LoadoutCheck {
 export function checkLoadout(m: MechState): LoadoutCheck {
   const st = mechStats(m);
   const problems: string[] = [];
-  if (st.reactors.length !== 1) problems.push(st.reactors.length === 0 ? 'No reactor installed' : 'Only one reactor allowed');
+  if (st.reactors.length > 1) problems.push('Only one reactor allowed');
   if (st.tonnage > st.maxTonnage) problems.push(`Too heavy: ${st.tonnage} / ${st.maxTonnage} t`);
   if (st.powerDraw > st.powerOutput) problems.push(`Not enough power: ${st.powerDraw} / ${st.powerOutput}`);
   if (st.slotsUsed > st.slots) problems.push(`Too many internal slots used: ${st.slotsUsed} / ${st.slots}`);
@@ -315,6 +327,24 @@ export function sellItem(s: CareerState, inventoryIndex: number): boolean {
   return true;
 }
 
+/** Fit an owned reactor ('' = none; the frame's own power still runs the mech). The old one goes to inventory. */
+export function setReactor(s: CareerState, m: MechState, id: string): boolean {
+  if (id && (s.inventory.indexOf(id) < 0 || EQUIPMENT[id]?.kind !== 'reactor')) return false;
+  const old = m.equipment.findIndex((e) => EQUIPMENT[e].kind === 'reactor');
+  if (old >= 0) s.inventory.push(...m.equipment.splice(old, 1));
+  if (id) {
+    s.inventory.splice(s.inventory.indexOf(id), 1);
+    m.equipment.unshift(id);
+  }
+  normalizeMech(m);
+  return true;
+}
+
+/** The fitted reactor's id, or '' for none. */
+export function reactorOf(m: MechState): string {
+  return m.equipment.find((e) => EQUIPMENT[e].kind === 'reactor') ?? '';
+}
+
 /** Install owned equipment. A new reactor replaces the old one (which goes to inventory). */
 export function installEquipment(s: CareerState, m: MechState, id: string): boolean {
   const idx = s.inventory.indexOf(id);
@@ -341,11 +371,11 @@ export function removeEquipment(s: CareerState, m: MechState, index: number): vo
 export function install(s: CareerState, m: MechState, mountId: string, weaponId: string): boolean {
   const mount = CHASSIS[m.chassis].mounts.find((x) => x.id === mountId);
   const idx = s.inventory.indexOf(weaponId);
-  if (!mount || idx < 0 || WEAPONS[weaponId].family !== mount.type) return false;
+  if (!mount || idx < 0 || !WEAPONS[weaponId] || !fitsMount(WEAPONS[weaponId], mount)) return false;
   uninstall(s, m, mountId);
   s.inventory.splice(s.inventory.indexOf(weaponId), 1);
   // New weapons default to group 1 for ballistics, 2 for energy and missiles.
-  m.weapons.push({ mount: mountId, weapon: weaponId, group: mount.type === 'ballistic' ? 1 : 2 });
+  m.weapons.push({ mount: mountId, weapon: weaponId, group: WEAPONS[weaponId].family === 'ballistic' ? 1 : 2 });
   return true;
 }
 

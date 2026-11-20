@@ -11,7 +11,7 @@ export interface EquipmentDef {
   kind: EquipmentKind;
   slots: number;
   tonnage: number;
-  /** Power drawn (reactors supply power instead; see `output`). */
+  /** Power drawn (reactors supply power instead; see `output`). Reactors use no internal slots: they have their own place. */
   power: number;
   price: number;
   /** Reactor: power supplied, and heat it gives off all the time. */
@@ -44,44 +44,44 @@ export const EQUIPMENT: Record<string, EquipmentDef> = {
     id: 'lightReactor',
     name: 'Light reactor',
     kind: 'reactor',
-    slots: 2,
+    slots: 0,
     tonnage: 4,
     power: 0,
     price: 30000,
-    output: 12,
+    output: 7,
     passiveHeat: 0.5,
   },
   standardReactor: {
     id: 'standardReactor',
     name: 'Standard reactor',
     kind: 'reactor',
-    slots: 2,
+    slots: 0,
     tonnage: 6,
     power: 0,
     price: 60000,
-    output: 16,
+    output: 10,
     passiveHeat: 1,
   },
   heavyReactor: {
     id: 'heavyReactor',
     name: 'Heavy reactor',
     kind: 'reactor',
-    slots: 3,
+    slots: 0,
     tonnage: 9,
     power: 0,
     price: 110000,
-    output: 23,
+    output: 16,
     passiveHeat: 2.5,
   },
   assaultReactor: {
     id: 'assaultReactor',
     name: 'Assault reactor',
     kind: 'reactor',
-    slots: 4,
+    slots: 0,
     tonnage: 13,
     power: 0,
     price: 190000,
-    output: 31,
+    output: 23,
     passiveHeat: 4,
   },
   heatSink: {

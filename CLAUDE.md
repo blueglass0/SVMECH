@@ -7,8 +7,9 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 **Milestone 8 (both parts) — weapons, drones and enemy mechs: built, awaiting the user's
 playtest** (the user is testing parts 1 and 2 together). M1–M7 signed off. Next by plan: 9
 (factions). Open: the user wants ideas on weapon convergence (wide mounts miss small targets
-dead ahead): decided, see below. The user floated replacing ballistic/energy hardpoints with
-small/medium/large mounts (and sized missile mounts); discussed, awaiting their call before M9.
+dead ahead): decided, see below. Sized mounts (small/medium/large, direct and back), frame
+power + reactor, and the Shrike glass cannon: built after M8 at the user's request (see notes).
+The user asked to go straight on to M9 (factions) after that.
 Deferred by the user: line-of-sight shadow rendering (logic already hides enemies behind
 walls); revisit as a graphics option, likely in M11.
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
@@ -290,6 +291,23 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   flights (2–3 drones) between; `MissionMap.units`. Old boards are refreshed on load.
 - Enemy beams/pulses/streams use red textures (`*-enemy`). Dev: Spawn drones, Spawn enemy mech
   (cycles types). Measured logic ~0.5–0.9 ms/frame with ~45 enemies (2 mechs, 11 drones) converging.
+
+## Sized mount notes (after M8)
+
+- Mounts (`MountDef`) have `kind` ('direct': arms/torso, guns and lasers; 'back': missiles, later
+  artillery) and `size` (small/medium/large); a weapon fits if `slot` matches and its `size` is no
+  bigger (`fitsMount` in `mechStats.ts`, `SIZE_RANK`). Weapon `family` only decides ammo, heat
+  style and colours now. Mount ids are kept from the old layout so saves line up; on load, weapons
+  that no longer fit go to inventory with a hangar note (`loadNotes`).
+- Sizes: small MG, small laser, pulse laser, rocket pod (back); medium AC, Gatling, laser, beam,
+  plasma, lightning, missile pack (back); large heavy cannon, large laser, heavy beam, missile rack
+  (new, back, 8 seekers, range 800). Heavy weapons mostly sit on heavy frames.
+- Power = `ChassisDef.power` (frame, 5–9; energy-leaning frames higher) + reactor output (light 7,
+  standard 10, heavy 16, assault 23). The reactor has its own row in the loadout (`setReactor`,
+  `reactorOf`), uses no internal slots, and is optional. Internal slots cut to match (Kestrel 4,
+  Shrike 4, Vulture 6, Condor 8, Roc 9). Reactors are still stored in `MechState.equipment`.
+- Shrike (light 35 t, ¢290k): one large torso mount on the centre line, nothing else; stock large
+  laser. The user's "glass cannon" idea.
 
 ## Conventions
 

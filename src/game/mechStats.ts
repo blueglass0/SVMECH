@@ -1,6 +1,6 @@
-import { CHASSIS, type ChassisDef, type Section } from '../data/chassis';
+import { CHASSIS, SIZE_RANK, type ChassisDef, type MountDef, type Section } from '../data/chassis';
 import { EQUIPMENT, EQUIPMENT_ACTION_ORDER, type EquipmentDef } from '../data/equipment';
-import { WEAPONS } from '../data/weapons';
+import { WEAPONS, type WeaponDef } from '../data/weapons';
 import type { Loadout } from '../data/loadouts';
 
 /** Everything derived from a loadout: limits, heat, armor, ammo, equipment. Pure. */
@@ -49,10 +49,11 @@ export function mechStats(l: Pick<Loadout, 'chassis' | 'weapons' | 'equipment'>)
     chassis: c,
     tonnage: c.baseTonnage + l.weapons.reduce((t, w) => t + WEAPONS[w.weapon].tonnage, 0) + sum((e) => e.tonnage),
     maxTonnage: c.maxTonnage,
-    slotsUsed: sum((e) => e.slots),
+    // The reactor has its own place; only other equipment uses internal slots.
+    slotsUsed: sum((e) => (e.kind === 'reactor' ? 0 : e.slots)),
     slots: c.internalSlots,
     reactors: eq.filter((e) => e.kind === 'reactor'),
-    powerOutput: sum((e) => e.output ?? 0),
+    powerOutput: c.power + sum((e) => e.output ?? 0),
     powerDraw: l.weapons.reduce((t, w) => t + WEAPONS[w.weapon].power, 0) + sum((e) => e.power),
     heatCapacity: c.heatCapacity,
     dissipation: c.heatDissipation + sum((e) => e.dissipation ?? 0),
@@ -71,4 +72,9 @@ export function mechStats(l: Pick<Loadout, 'chassis' | 'weapons' | 'equipment'>)
       radar: Math.max(0, ...eq.map((e) => e.sensors?.radar ?? 0)),
     },
   };
+}
+
+/** Does a weapon fit a mount? Right kind (direct-fire or back), and no bigger than the mount. */
+export function fitsMount(w: WeaponDef, mount: MountDef): boolean {
+  return w.slot === mount.kind && SIZE_RANK[w.size] <= SIZE_RANK[mount.size];
 }
