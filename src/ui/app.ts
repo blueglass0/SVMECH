@@ -317,7 +317,7 @@ export class App {
         h(
           'div',
           { class: 'rows' },
-          row('Objective', `${MISSION_TYPES[k.mission ?? 'destroy'].name}: ${C.objectiveText(k)}, then reach evac`, ''),
+          row('Objective', `${MISSION_TYPES[k.mission ?? 'destroy'].name}: ${C.objectiveText(k)}${k.mission === 'defend' || k.mission === 'escort' ? '' : ', then reach evac'}`, ''),
           k.mapSize === 'large' ? row('Map', 'large (longer walks, more ground to cover)', '') : null,
           row('Bonus', k.bonus.label, `+${money(C.bonusPayout(k))}`),
           k.maxTonnage ? row('Tonnage limit', 'every deployed mech', `${k.maxTonnage} t`) : null,

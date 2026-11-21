@@ -196,6 +196,8 @@ const ARMY_PALETTES: Record<string, { hull: number; hullDark: number; edge: numb
   '-royal': { hull: 0x7a4a44, hullDark: 0x4e2f2b, edge: 0xc99086, accent: 0xff5a4f },
   '-tech': { hull: 0x3f5a78, hullDark: 0x283b50, edge: 0x95bde6, accent: 0x9fd8ff },
   '-free': { hull: 0x6e5c40, hullDark: 0x4a3c2a, edge: 0xb89c72, accent: 0xff9a3d },
+  // Your side (escort convoys): the player's grey and orange.
+  '-ally': { hull: 0x58636d, hullDark: 0x3a434b, edge: 0x9aa6b0, accent: 0xe8a33d },
 };
 
 /** Small four-rotor drone (facing +x). */
@@ -316,6 +318,22 @@ export function bakeCombatArt(scene: Phaser.Scene): void {
     g.fillStyle(0x2e3330).fillRoundedRect(13, -13, 17, 26, 4);
     g.lineStyle(1.5, 0x45494a, 0.6).strokeRoundedRect(-30, -15, 40, 30, 3);
   });
+  // Generator (defend missions): a squat power block with cooling fins and a glowing core.
+  for (const wreck of [false, true]) {
+    bake(scene, wreck ? 'generator-wreck' : 'generator', 84, 84, (g) => {
+      g.fillStyle(wreck ? 0x232628 : 0x3a434b).fillRoundedRect(-32, -32, 64, 64, 8);
+      g.lineStyle(2.5, wreck ? 0x45494a : 0x9aa6b0, 1).strokeRoundedRect(-32, -32, 64, 64, 8);
+      g.lineStyle(3, wreck ? 0x2e3330 : 0x58636d);
+      for (const d of [-20, -10, 10, 20]) {
+        g.lineBetween(d, -28, d, -18);
+        g.lineBetween(d, 18, d, 28);
+      }
+      if (!wreck) {
+        g.fillStyle(0xe8a33d, 0.35).fillCircle(0, 0, 15);
+        g.fillStyle(0xffd27a).fillCircle(0, 0, 8);
+      }
+    });
+  }
   // Intel ping: where the hunted mech was last reported.
   bake(scene, 'intel-ping', 120, 120, (g) => {
     g.lineStyle(3, 0xe8a33d, 0.9).strokeCircle(0, 0, 50);

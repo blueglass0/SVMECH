@@ -310,7 +310,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
       ],
       equipment: ['heavyReactor', 'heatSink', 'heatSink', 'pointDefense'],
       armorScale: 0.8,
-      damageScale: 0.36,
+      damageScale: 0.3,
       aimErrorDeg: 3.5,
       strafe: 0.3,
       sizeScale: 1.12,

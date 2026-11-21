@@ -1,7 +1,7 @@
 import type { Obstacle } from '../../core/collision';
 import { Rng } from '../../core/rng';
 import type { Vec } from '../../core/math';
-import { DESTROY_TARGETS, HUNT, MAP_SIZES, RAID, type MapSize, type MissionType } from '../../data/missions';
+import { DEFEND, DESTROY_TARGETS, ESCORT, HUNT, MAP_SIZES, RAID, type MapSize, type MissionType } from '../../data/missions';
 import type { CombatDifficulty } from '../../data/difficulty';
 import { ECONOMY } from '../../data/economy';
 
@@ -52,8 +52,10 @@ export interface MissionMap {
   mission: MissionType;
   /** Bases / outposts (uplinks sit in the middle of these on destroy missions). */
   sites: Vec[];
-  /** Convoy raid: where the convoy enters and where it leaves the map. */
+  /** Convoy raid / escort: where the convoy starts and where its road ends. */
   convoy?: { start: Vec; end: Vec };
+  /** Defend: the generators to hold, and where attack waves come in. */
+  defense?: { center: Vec; generators: Vec[]; waveSpawns: Vec[] };
   /** Field stations: ammo depot, repair bay, swap station. */
   stations: { type: StationType; x: number; y: number }[];
 }
@@ -105,12 +107,50 @@ export function generateMap(seed: number, difficulty: CombatDifficulty, opts: Ma
     const right = { x: W - gap - 140, y: rng.range(H * 0.15, H * 0.5) };
     convoy = rng.next() < 0.5 ? { start: left, end: right } : { start: right, end: left };
   }
-  // Ground kept clear of obstacles: sites, plus the convoy's entry and exit.
+  // Escort: our convoy starts beside the drop point and drives to the far edge.
+  if (opts.mission === 'escort') {
+    const side = rng.next() < 0.5 ? -1 : 1;
+    const start = { x: Math.max(gap + 160, Math.min(W - gap - 160, spawn.x + side * 260)), y: spawn.y - 140 };
+    convoy = { start, end: { x: rng.range(W * 0.2, W * 0.8), y: gap + 140 } };
+  }
+  // Defend: a base of generators above the drop point; waves come in from the far edges.
+  let defense: MissionMap['defense'];
+  if (opts.mission === 'defend') {
+    const center = { x: spawn.x, y: spawn.y - DEFEND.baseOffset * scale };
+    const generators: Vec[] = [];
+    for (let i = 0; i < DEFEND.generators; i++) {
+      const a = -Math.PI / 2 + (i / DEFEND.generators) * Math.PI * 2;
+      generators.push({ x: center.x + Math.cos(a) * 150, y: center.y + Math.sin(a) * 150 });
+    }
+    const waveSpawns = [
+      { x: rng.range(W * 0.2, W * 0.8), y: gap + 160 },
+      { x: gap + 160, y: rng.range(H * 0.12, H * 0.45) },
+      { x: W - gap - 160, y: rng.range(H * 0.12, H * 0.45) },
+    ];
+    defense = { center, generators, waveSpawns };
+  }
+  // Ground kept clear of obstacles: sites, the convoy road's ends, the defended base, wave entries.
   const reserved: Vec[] = convoy ? [convoy.start, convoy.end] : [];
+  if (defense) reserved.push(defense.center, ...defense.generators, ...defense.waveSpawns);
 
-  // Sites (uplink bases or outposts): far from the drop point and from each other.
-  const siteCount = opts.mission === 'destroy' ? opts.targets : opts.mission === 'hunt' ? HUNT.outposts : RAID.outposts;
+  // Sites (uplink bases or outposts): far from the drop point and from each other. Escort
+  // ambushes sit beside the road instead; defend missions have none.
+  const siteCount = { destroy: opts.targets, hunt: HUNT.outposts, raid: RAID.outposts, defend: 0, escort: 0 }[opts.mission];
   const sites: Vec[] = [];
+  if (opts.mission === 'escort' && convoy) {
+    const { start, end } = convoy;
+    const len = dist(start, end);
+    const nx = -(end.y - start.y) / len;
+    const ny = (end.x - start.x) / len;
+    for (let i = 0; i < ESCORT.ambushes; i++) {
+      const t = 0.3 + (i / Math.max(1, ESCORT.ambushes - 1)) * 0.5;
+      const off = (rng.next() < 0.5 ? -1 : 1) * rng.range(260, 380);
+      sites.push({
+        x: Math.max(350, Math.min(W - 350, start.x + (end.x - start.x) * t + nx * off)),
+        y: Math.max(350, Math.min(H - 350, start.y + (end.y - start.y) * t + ny * off)),
+      });
+    }
+  }
   for (let attempt = 0; sites.length < siteCount && attempt < 3000; attempt++) {
     const minApart = (attempt < 1000 ? 850 : 600) * scale;
     const p = { x: rng.range(350, W - 350), y: rng.range(350, H * 0.7) };
@@ -302,19 +342,22 @@ export function generateMap(seed: number, difficulty: CombatDifficulty, opts: Ma
   const placeTank = (near: Vec, spread: number, home: Vec) => placeUnit(tanks, () => pickWeighted(rng, tankTypes), near, spread, home);
   const guards = Math.round(T.tanksPerTarget * difficulty.enemyCount);
   for (const s of sites) for (let i = 0; i < guards; i++) placeTank(s, 380, s);
-  const roamers = Math.round(rng.int(T.roamingTanks[0], T.roamingTanks[1]) * difficulty.enemyCount * area);
+  // Defend missions have no standing army: everything comes in waves.
+  const roamers = opts.mission === 'defend' ? 0 : Math.round(rng.int(T.roamingTanks[0], T.roamingTanks[1]) * difficulty.enemyCount * area);
   for (let i = 0; i < roamers; i++) {
     const p = { x: rng.range(400, W - 400), y: rng.range(400, H - 900) };
     placeTank(p, 200, p);
   }
 
   // Enemy mechs guard a base each (they patrol around it); drone flights roam between.
-  for (let i = 0; i < forces.mechs.length; i++) {
+  // Defend missions bring both in with the attack waves instead.
+  const standing = opts.mission !== 'defend' && sites.length > 0;
+  for (let i = 0; standing && i < forces.mechs.length; i++) {
     const s = sites[i % sites.length];
     const type = forces.mechs[i];
     placeUnit(units, () => type, s, 450, s, 55, 1100);
   }
-  for (let f = 0; f < forces.droneFlights; f++) {
+  for (let f = 0; standing && f < forces.droneFlights; f++) {
     const flightSize = rng.int(T.droneFlightSize[0], T.droneFlightSize[1]);
     const c = { x: rng.range(400, W - 400), y: rng.range(300, H - 1000) };
     for (let i = 0; i < flightSize; i++) placeUnit(units, () => T.droneType, c, 160, c, 20, 1000);
@@ -336,7 +379,7 @@ export function generateMap(seed: number, difficulty: CombatDifficulty, opts: Ma
     }
   }
 
-  return { seed, width: W, height: H, obstacles, spawn, targets, turrets, tanks, units, stations, mission: opts.mission, sites, convoy };
+  return { seed, width: W, height: H, obstacles, spawn, targets, turrets, tanks, units, stations, mission: opts.mission, sites, convoy, defense };
 }
 
 function pickWeighted(rng: Rng, items: readonly { type: string; weight: number }[]): string {

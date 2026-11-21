@@ -47,7 +47,7 @@ export class Drone extends Gunner {
   update(dt: number, ctx: AiContext): void {
     if (!this.alive) return;
     this.sense(dt, ctx);
-    const p = ctx.player;
+    const p = this.foe;
     if (this.engaged && this.lostTimer > GIVE_UP_AFTER) this.engaged = false;
 
     // Where to fly: a point circling the player, the last place it was seen, or a wander point near home.

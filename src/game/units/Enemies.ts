@@ -49,7 +49,8 @@ export class Tank extends Gunner {
   update(dt: number, ctx: AiContext): void {
     if (!this.alive) return;
     this.sense(dt, ctx);
-    const d = Math.hypot(ctx.player.x - this.x, ctx.player.y - this.y);
+    const f = this.foe;
+    const d = Math.hypot(f.x - this.x, f.y - this.y) - (f === ctx.player ? 0 : f.radius);
 
     // Pick where to go.
     if (this.engaged) {
@@ -66,7 +67,7 @@ export class Tank extends Gunner {
 
     // Follow the path.
     let targetSpeed = 0;
-    let targetAngle = this.engaged && this.canSee ? Math.atan2(ctx.player.y - this.y, ctx.player.x - this.x) : this.hullAngle;
+    let targetAngle = this.engaged && this.canSee ? Math.atan2(f.y - this.y, f.x - this.x) : this.hullAngle;
     if (this.hasGoal) {
       this.repath -= dt;
       if (this.repath <= 0 || this.pathIndex >= this.path.length) {

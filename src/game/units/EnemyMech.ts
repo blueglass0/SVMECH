@@ -99,7 +99,7 @@ export class EnemyMech extends Enemy {
     }
     this.fx = ctx.fx;
     this.sense(dt, ctx);
-    const p = ctx.player;
+    const p = this.foe;
     const mech = this.mech;
     const input = this.input;
     const dx = p.x - this.x;
