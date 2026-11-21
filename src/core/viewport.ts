@@ -1,3 +1,4 @@
+import { settings } from './settings';
 import Phaser from 'phaser';
 import { DISPLAY } from '../config/display';
 
@@ -30,10 +31,13 @@ export const Viewport: ViewportInfo = {
 export function computeViewport(cssWidth: number, cssHeight: number, dpr: number): ViewportInfo {
   const w = Math.max(1, cssWidth);
   const h = Math.max(1, cssHeight);
-  let scale = Math.min(dpr || 1, DISPLAY.maxPixelRatio);
+  // Low quality (settings) renders at most 1x and ~720p worth of pixels.
+  const low = settings.quality === 'low';
+  const maxPixels = low ? DISPLAY.lowRenderPixels : DISPLAY.maxRenderPixels;
+  let scale = Math.min(dpr || 1, low ? 1 : DISPLAY.maxPixelRatio);
   const pixels = w * h * scale * scale;
-  if (pixels > DISPLAY.maxRenderPixels) {
-    scale = Math.sqrt(DISPLAY.maxRenderPixels / (w * h));
+  if (pixels > maxPixels) {
+    scale = Math.sqrt(maxPixels / (w * h));
   }
   scale = Math.max(scale, DISPLAY.minRenderScale);
   return {
@@ -57,6 +61,9 @@ export function initViewport(container: HTMLElement): ViewportInfo {
 }
 
 /** Keep the canvas matched to its container (window resize, rotation, browser bars). */
+/** Re-measure now (after the quality setting changes). Set up by `trackViewport`. */
+export let refreshViewport: () => void = () => {};
+
 export function trackViewport(game: Phaser.Game, container: HTMLElement): void {
   let pending = false;
   const apply = () => {
@@ -78,6 +85,7 @@ export function trackViewport(game: Phaser.Game, container: HTMLElement): void {
       requestAnimationFrame(apply);
     }
   };
+  refreshViewport = schedule;
   new ResizeObserver(schedule).observe(container);
   window.addEventListener('orientationchange', schedule);
   // DPR changes when a window moves between monitors or the page is zoomed.

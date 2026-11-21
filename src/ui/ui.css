@@ -524,3 +524,29 @@ body.in-mission .toolbar .mission-only {
 .bar.rep {
   background: linear-gradient(90deg, #3a2224 0 35%, #2a3138 35% 100%);
 }
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.slider-row input[type='range'] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+.screen.pause .panel.settings {
+  width: min(460px, calc(100% - 32px));
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+}

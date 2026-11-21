@@ -10,8 +10,9 @@ import { EQUIPMENT, type EquipmentDef } from '../data/equipment';
 import { isEquipment, isWeapon, itemName } from '../data/items';
 import { fitsMount, mechStats } from '../game/mechStats';
 import { SECTIONS } from '../game/units/SectionDamage';
-import { play } from '../core/audio';
-import { settings, saveSettings } from '../core/settings';
+import { play, setMuted, setVolume } from '../core/audio';
+import { settings, saveSettings, type ControlScheme, type TouchFire } from '../core/settings';
+import { refreshViewport } from '../core/viewport';
 import { clockTime, h, money, signedMoney } from './h';
 import type { MapScene } from '../scenes/MapScene';
 
@@ -123,6 +124,7 @@ export class App {
         { class: 'title' },
         h('h1', null, 'Steel Vulture'),
         h('p', { class: 'muted' }, 'Mercenary mech pilot. Take contracts, keep your mech running, stay out of debt.'),
+        h('button', { class: 'link', onclick: () => this.openSettings() }, 'Settings'),
         c && !c.over
           ? h(
               'div',
@@ -864,7 +866,7 @@ export class App {
 
   // ---------- In-mission pause ----------
 
-  pauseMenu(): void {
+  pauseMenu(openSettings = false): void {
     if (!this.inMission) return;
     const map = this.game.scene.getScene('Map') as MapScene;
     map.releaseInput();
@@ -892,21 +894,107 @@ export class App {
           },
           'Withdraw from mission',
         ),
-        h(
-          'button',
-          {
-            onclick: (e: Event) => {
-              settings.fog = settings.fog === 'faded' ? 'dark' : 'faded';
-              saveSettings();
-              (e.target as HTMLButtonElement).textContent = fogLabel();
-            },
-          },
-          fogLabel(),
-        ),
+        h('button', { onclick: () => showSettings() }, 'Settings'),
         h('p', { class: 'muted small' }, "Withdrawing fails the contract: no pay, and fuel and ammo are already spent. Your mech comes home as it is."),
       ),
     );
+    const pausePanel = overlay.firstElementChild as HTMLElement;
+    const showSettings = () => {
+      overlay.replaceChildren(
+        this.settingsPanel(() => {
+          // Touch layout and firing mode may have changed.
+          map.releaseInput();
+          overlay.replaceChildren(pausePanel);
+        }),
+      );
+    };
     this.screen.parentElement!.appendChild(overlay);
+    if (openSettings) showSettings();
+  }
+
+  // ---------- Settings ----------
+
+  /** Settings from the toolbar or title: over the pause menu in a mission, a screen otherwise. */
+  openSettings(): void {
+    if (this.inMission) {
+      if (!document.querySelector('.screen.pause')) this.pauseMenu(true);
+      return;
+    }
+    const back = () => (this.career && !this.career.over ? this.showHangar() : this.showTitle());
+    this.show(h('div', { class: 'title' }, this.settingsPanel(back)));
+  }
+
+  private settingsPanel(onBack: () => void): HTMLElement {
+    const panel = h('div', { class: 'panel settings' });
+    const render = () => {
+      const c = this.career && !this.career.over ? this.career : null;
+      const seg = <T extends string>(options: [T, string][], value: T, set: (v: T) => void) =>
+        h(
+          'div',
+          { class: 'seg small' },
+          options.map(([v, label]) => h('button', { type: 'button', class: v === value ? 'on' : '', onclick: () => (set(v), saveSettings(), render()) }, label)),
+        );
+      const field = (label: string, help: string, control: HTMLElement) =>
+        h('div', { class: 'field' }, h('div', { class: 'field-label' }, label, help ? h('span', { class: 'muted' }, ` · ${help}`) : null), control);
+      const slider = (min: number, max: number, value: number, set: (v: number) => void, fmt: (v: number) => string) => {
+        const out = h('span', { class: 'num small' }, fmt(value));
+        const input = h('input', { type: 'range', min: String(min), max: String(max), value: String(value) }) as HTMLInputElement;
+        input.oninput = () => {
+          set(Number(input.value));
+          out.textContent = fmt(Number(input.value));
+        };
+        input.onchange = () => saveSettings();
+        return h('div', { class: 'slider-row' }, input, out);
+      };
+      const groups: (HTMLElement | null)[] = [
+        h('div', { class: 'card-top' }, h('h3', null, 'Settings'), h('button', { class: 'primary', onclick: onBack }, 'Done')),
+        c
+          ? h(
+              'div',
+              { class: 'settings-group' },
+              h('div', { class: 'tier' }, 'Difficulty (this career)'),
+              field('Combat', 'enemy numbers, accuracy and damage; from your next deployment', seg(LEVELS.map((l) => [l, cap(l)]), c.difficulty.combat, (v) => (C.setDifficulty(c, v, c.difficulty.economy), this.save()))),
+              field('Economy', 'costs, payouts, loans; prices change now', seg(LEVELS.map((l) => [l, cap(l)]), c.difficulty.economy, (v) => (C.setDifficulty(c, c.difficulty.combat, v), this.save()))),
+            )
+          : null,
+        h(
+          'div',
+          { class: 'settings-group' },
+          h('div', { class: 'tier' }, 'Sound'),
+          field('Volume', '', slider(0, 100, Math.round(settings.volume * 100), (v) => setVolume(v / 100), (v) => `${v}%`)),
+          field('Sound', '', seg([['on', 'On'], ['off', 'Muted']], settings.muted ? 'off' : 'on', (v) => setMuted(v === 'off'))),
+        ),
+        h(
+          'div',
+          { class: 'settings-group' },
+          h('div', { class: 'tier' }, 'Display'),
+          field(
+            'Graphics',
+            'Low renders fewer pixels and particles, for weak phones and laptops',
+            seg([['high', 'High'], ['low', 'Low']], settings.quality, (v) => ((settings.quality = v), refreshViewport())),
+          ),
+          field('Outside your vision', '', seg([['faded', 'Terrain faded'], ['dark', 'Dark']], settings.fog, (v) => (settings.fog = v))),
+          field('Screen shake', '', seg([['on', 'On'], ['off', 'Off']], settings.shake ? 'on' : 'off', (v) => (settings.shake = v === 'on'))),
+          field('Frame rate', 'shows fps in the corner', seg([['off', 'Hidden'], ['on', 'Shown']], settings.showFps ? 'on' : 'off', (v) => (settings.showFps = v === 'on'))),
+        ),
+        h(
+          'div',
+          { class: 'settings-group' },
+          h('div', { class: 'tier' }, 'Controls'),
+          field('PC movement', '', seg<ControlScheme>([['tank', 'Tank'], ['direction', 'Direction']], settings.scheme.kbm, (v) => (settings.scheme.kbm = v))),
+          field('Phone movement', '', seg<ControlScheme>([['direction', 'Direction'], ['tank', 'Tank']], settings.scheme.touch, (v) => (settings.scheme.touch = v))),
+          field(
+            'Phone firing',
+            TOUCH_FIRE_HELP[settings.touchFire],
+            seg<TouchFire>([['tiers', 'Ring + edge'], ['swap', 'Swap button'], ['both', 'All weapons']], settings.touchFire, (v) => (settings.touchFire = v)),
+          ),
+          field('Phone button size', '', slider(80, 130, Math.round(settings.buttonScale * 100), (v) => (settings.buttonScale = v / 100), (v) => `${v}%`)),
+        ),
+      ];
+      panel.replaceChildren(...groups.filter((g): g is HTMLElement => !!g));
+    };
+    render();
+    return panel;
   }
 
   // ---------- Dev ----------
@@ -946,9 +1034,11 @@ export class App {
   }
 }
 
-function fogLabel(): string {
-  return `Outside your vision: ${settings.fog === 'faded' ? 'terrain faded' : 'dark'}`;
-}
+const TOUCH_FIRE_HELP: Record<TouchFire, string> = {
+  tiers: 'push past the inner ring to fire group 1, past the dashed outer ring to fire both groups',
+  swap: 'the stick fires one group; the ⇄ button switches which',
+  both: 'past the inner ring fires every weapon',
+};
 
 function row(label: string, detail: string, value: string, cls = ''): HTMLElement {
   return h('div', { class: `row ${cls}` }, h('span', null, label, detail ? h('span', { class: 'muted small' }, ` ${detail}`) : null), h('span', { class: 'num' }, value));

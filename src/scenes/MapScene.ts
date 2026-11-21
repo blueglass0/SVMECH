@@ -229,6 +229,11 @@ export class MapScene extends Phaser.Scene {
     if (portraitPhone.matches) this.scene.pause();
   }
 
+  /** Camera shake, unless turned off in the settings. */
+  private shake(ms: number, intensity: number): void {
+    if (settings.shake) this.cameras.main.shake(ms, intensity, false);
+  }
+
   /** Release every held input (used when the game is paused, e.g. by the rotate prompt). */
   releaseInput(): void {
     this.controls.reset();
@@ -263,7 +268,7 @@ export class MapScene extends Phaser.Scene {
       this.combat,
     );
     if (stepped && this.movement.stepShake > 0 && Math.abs(p.motor.speed) > 20) {
-      cam.shake(90, this.movement.stepShake, false);
+      this.shake(90, this.movement.stepShake);
     }
 
     for (const e of this.enemies) e.update(dt, this.ai);
@@ -801,7 +806,7 @@ export class MapScene extends Phaser.Scene {
       // Direction marker: newest first, capped.
       hud.hitMarkers.unshift({ angle: this.player.lastHitAngle, time: this.player.lastHit });
       if (hud.hitMarkers.length > 6) hud.hitMarkers.length = 6;
-      this.cameras.main.shake(110, Math.min(0.006, 0.0015 + dmg * 0.00015), false);
+      this.shake(110, Math.min(0.006, 0.0015 + dmg * 0.00015));
     }
   }
 
@@ -1047,7 +1052,7 @@ export class MapScene extends Phaser.Scene {
     // Landing: flash, dust and a heavy thud.
     this.fx.explosion(best.x, best.y, 1.2);
     play('collapse', 1);
-    this.cameras.main.shake(250, 0.006, false);
+    this.shake(250, 0.006);
     hud.briefing = `Backup ${CHASSIS[state.chassis].name} deployed.`;
     this.briefingUntil = this.elapsed + 3;
   }

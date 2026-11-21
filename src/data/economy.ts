@@ -118,7 +118,7 @@ export const HUNT_FLAVOR = [
 ];
 
 export const RAID_FLAVOR = [
-  'A {enemy} supply convoy is crossing the sector. {employer} wants it stopped before it reaches the front.',
+  'The {enemy} are moving a supply convoy across the sector. {employer} wants it stopped before it reaches the front.',
   '{employer} pays for every {enemy} truck that never arrives. The convoy is already moving.',
   'The {enemy} are running fuel and parts through this valley. Break the convoy for {employer}.',
 ];

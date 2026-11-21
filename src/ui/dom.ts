@@ -54,6 +54,10 @@ export function mountDomUi(game: Phaser.Game, container: HTMLElement, app: App):
     fsBtn.classList.add('icon');
   }
 
+  const gearBtn = button(bar, '⚙', () => app.openSettings());
+  gearBtn.title = 'Settings';
+  gearBtn.classList.add('icon');
+
   const muteBtn = button(bar, '', () => {
     setMuted(!settings.muted);
     muteBtn.textContent = settings.muted ? '🔇' : '🔊';

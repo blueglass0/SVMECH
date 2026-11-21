@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { ART_SCALE } from '../art';
+import { settings } from '../../core/settings';
 
 interface Particle {
   img: Phaser.GameObjects.Image;
@@ -75,8 +76,15 @@ export class Effects {
     this.rings = new Pool(scene, 'ring', 10, 9, true);
   }
 
+  /** Low quality: about half the sparks, smoke and missile trails. */
+  private get low(): boolean {
+    return settings.quality === 'low';
+  }
+  private trailSkip = false;
+
   /** Bullet impact: a few sparks bouncing back from the surface. */
   impact(x: number, y: number, angle: number, count = 3): void {
+    if (this.low) count = Math.ceil(count / 2);
     for (let i = 0; i < count; i++) {
       const a = angle + Math.PI + (Math.random() - 0.5) * 2.2;
       const s = 120 + Math.random() * 220;
@@ -91,12 +99,12 @@ export class Effects {
   explosion(x: number, y: number, size = 1): void {
     this.flashes.spawn(x, y, 0, 0.25, 2.2 * size, 0, 0, 1.5 * size);
     this.rings.spawn(x, y, 0, 0.45, 0.3 * size, 0, 0, 1.3 * size);
-    for (let i = 0; i < 10; i++) {
+    for (let i = this.low ? 5 : 0; i < 10; i++) {
       const a = Math.random() * Math.PI * 2;
       const s = (100 + Math.random() * 260) * size;
       this.sparks.spawn(x, y, 0, 0.3 + Math.random() * 0.3, 1.4, Math.cos(a) * s, Math.sin(a) * s);
     }
-    for (let i = 0; i < 4; i++) {
+    for (let i = this.low ? 2 : 0; i < 4; i++) {
       const a = Math.random() * Math.PI * 2;
       this.smoke.spawn(x, y, 0, 1.2 + Math.random(), 1 * size, Math.cos(a) * 30, Math.sin(a) * 30, 1.2 * size);
     }
@@ -115,6 +123,7 @@ export class Effects {
 
   /** Missile exhaust puff. */
   trail(x: number, y: number): void {
+    if (this.low && (this.trailSkip = !this.trailSkip)) return;
     this.trails.spawn(x, y, 0, 0.35, 0.28, 0, 0, 0.3);
   }
 

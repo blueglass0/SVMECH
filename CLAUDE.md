@@ -4,10 +4,9 @@ Top-down real-time mech game. Full design and milestone plan: `docs/PLAN.md`. Re
 
 ## Current milestone
 
-**Milestone 10 (both parts) — Mech hunt, convoy raid, defend, escort, large maps: built,
-awaiting the user's playtest** (part 1 is being tested; part 2 added defend and escort). M1–M9
-played. Next by plan: 11 (polish: difficulty menu, tutorial, sound pass, menu and phone UI pass
-incl. the crowded right-stick buttons, performance check).
+**Milestone 11 part 1 — Settings menu, phone controls rework, quality options: built,
+awaiting the user's playtest.** M1–M10 played (defend/escort still being tuned by the user).
+Next: M11 part 2 (tutorial and sound pass), then the optional extras.
 Deferred by the user: line-of-sight shadow rendering (logic already hides enemies behind
 walls); revisit as a graphics option, likely in M11.
 Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back into `src/data/`.
@@ -38,6 +37,10 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   1.1–1.15, hardpoints scale too), Condor and Roc arm mounts were narrowed (Roc ±24–34, Condor
   ±21–27), and bigger tanks/turrets may come later. Players can put guns on one arm to control
   where shots come from.
+- **Phone firing** (M11, answers the open question): default 'tiers' — the right stick aims inside
+  its inner ring, fires group 1 past it, and fires both groups when the thumb goes past the dashed
+  outer ring (`CONTROLS.bothGroupsAt` = 1.15 stick radii). 'swap' (old ⇄ button) and 'both' (every
+  weapon past the ring) are options. The swap button only exists in swap mode.
 - **Chassis feel:** heavier chassis get lower turn rates and more momentum (lower accel/decel),
   lights turn and accelerate quicker. The movement numbers in `chassis.ts` are enough to make
   chassis feel distinct (user-approved, M2).
@@ -379,6 +382,21 @@ Tuning loop: the user tunes with the `?debug` Tune panel and pastes values back 
   surviving truck has arrived and at least 60% (rounded) made it. Bonus: every truck arrives.
 - Validated 240 maps (defend/escort × standard/large): generators, wave paths and roads all
   reachable. Logic 0.1–0.35 ms/frame in tests.
+
+## Settings notes (M11 part 1)
+
+- `core/settings.ts`: scheme per device, muted, fog look, `volume` (0..1), `quality` ('high' |
+  'low'), `shake`, `showFps`, `touchFire` ('tiers' | 'swap' | 'both'), `buttonScale` (0.8..1.3).
+- Settings screen (`App.settingsPanel`): from the ⚙ toolbar button, the title screen, and the pause
+  menu (in a mission it replaces the pause panel; closing it re-lays-out touch controls). Sections:
+  difficulty for the current career (`setDifficulty`: combat from the next deploy, economy at
+  once), sound, display, controls.
+- Low quality: pixel ratio capped at 1 and ~720p of pixels (`DISPLAY.lowRenderPixels`,
+  `computeViewport`, `refreshViewport()` re-measures immediately); about half the sparks, smoke
+  and missile trails (`Effects.low`). Camera shake goes through `MapScene.shake()`.
+- Phone buttons sit on an arc around the right stick (`CONTROLS.buttonArc`, `buttonSlots`,
+  `interactSlot`), scaled by `buttonScale`; swap first in swap mode, then flares, shield; USE
+  lower-left. HUD draws the dashed outer ring in tiers mode and an fps readout when enabled.
 
 ## Conventions
 

@@ -47,6 +47,9 @@ export class HudScene extends Phaser.Scene {
   private groupTexts: Txt[] = [];
   private build!: Txt;
   private debugText?: Txt;
+  private bothRing!: Img;
+  private fpsText!: Txt;
+  private fpsTimer = 0;
   private panelBg!: Img;
   private silhouette: { img: Img; section: Section; base: string; dx: number; dy: number }[] = [];
   private hitArcs: Img[] = [];
@@ -135,6 +138,8 @@ export class HudScene extends Phaser.Scene {
     for (let i = 0; i < 12; i++) this.threatArrows.push(this.add.image(0, 0, 'edge-threat').setScale(1 / HUD_ART_SCALE).setVisible(false));
 
     this.fireRing = this.add.image(0, 0, 'stick-ring').setScale(1 / HUD_ART_SCALE);
+    // 'tiers' firing: past this outer ring the right stick fires both groups.
+    this.bothRing = this.add.image(0, 0, 'stick-ring-outer').setScale(1 / HUD_ART_SCALE);
     for (const view of [sticks.left, sticks.right]) {
       const base = this.add.image(0, 0, 'stick-base').setScale(1 / HUD_ART_SCALE);
       const knob = this.add.image(0, 0, 'stick-knob').setScale(1 / HUD_ART_SCALE);
@@ -164,6 +169,7 @@ export class HudScene extends Phaser.Scene {
       label: this.addText(0, 0, '2', { fontFamily: FONT, fontSize: '16px', fontStyle: 'bold', color: '#d6dde3' }).setOrigin(0.5),
     };
 
+    this.fpsText = this.addText(0, 0, '', { fontFamily: MONO, fontSize: '11px', color: '#9fe870', backgroundColor: '#000000aa', padding: { x: 5, y: 2 } }).setOrigin(1, 0);
     if (DEBUG) {
       this.debugText = this.addText(0, 0, '', {
         fontFamily: MONO,
@@ -195,29 +201,38 @@ export class HudScene extends Phaser.Scene {
       s.knob.setVisible(touch).setPosition(s.view.knobX, s.view.knobY).setAlpha(a);
     }
     this.fireRing.setVisible(touch).setPosition(sticks.right.baseX, sticks.right.baseY).setAlpha(actions.fire1 || actions.fire2 ? 1 : 0.6);
+    const tiers = settings.touchFire === 'tiers';
+    this.bothRing.setVisible(touch && tiers).setPosition(sticks.right.baseX, sticks.right.baseY).setAlpha(actions.fire2 ? 1 : 0.45);
+    const k = settings.buttonScale;
     const b = touchButtons.swap;
-    this.fire2.img.setVisible(touch).setPosition(b.x, b.y).setAlpha(b.pressed ? 1 : 0.6);
-    this.fire2.label.setVisible(touch).setPosition(b.x, b.y);
+    const showSwap = touch && b.visible;
+    this.fire2.img.setVisible(showSwap).setPosition(b.x, b.y).setAlpha(b.pressed ? 1 : 0.6).setScale(((CONTROLS.buttonRadius / 40) * k) / HUD_ART_SCALE);
+    this.fire2.label.setVisible(showSwap).setPosition(b.x, b.y);
     this.setTextIfChanged(this.fire2.label, 'swap', `⇄${actions.stickGroup}`);
     [touchButtons.equip1, touchButtons.equip2].forEach((eb, i) => {
       const st = hud.equipment[i];
       const show = touch && eb.visible && !!st;
       const ui = this.equipButtons[i];
+      ui.img.setScale(((CONTROLS.equipButtonRadius / 40) * k) / HUD_ART_SCALE);
       ui.img.setVisible(show).setPosition(eb.x, eb.y).setAlpha(eb.pressed || st?.active ? 1 : st?.ready ? 0.65 : 0.3);
       ui.label.setVisible(show).setPosition(eb.x, eb.y);
       if (st) this.setTextIfChanged(ui.label, 'eqb' + i, st.label.replace(' ', '\n'));
     });
     if (hud.equipment.length !== this.layoutEquipCount) this.layout();
     const ib = touchButtons.interact;
-    this.interactBtn.img.setVisible(touch && ib.visible).setPosition(ib.x, ib.y).setAlpha(ib.pressed ? 1 : hud.interactReady ? 0.8 : 0.35);
+    this.interactBtn.img
+      .setVisible(touch && ib.visible)
+      .setPosition(ib.x, ib.y)
+      .setAlpha(ib.pressed ? 1 : hud.interactReady ? 0.8 : 0.35)
+      .setScale(((CONTROLS.equipButtonRadius / 40) * k) / HUD_ART_SCALE);
     this.interactBtn.label.setVisible(touch && ib.visible).setPosition(ib.x, ib.y);
     // Station prompt just above the status panel.
     const prompt = hud.interactPrompt ? (touch ? hud.interactPrompt : `F  ${hud.interactPrompt}`) : '';
     if (this.setTextIfChanged(this.interactText, 'interact', prompt)) this.interactText.setColor(hud.interactReady ? '#8fd16a' : '#8b98a3');
     this.interactText.setVisible(prompt !== '').setPosition(w / 2, this.panelTop - 8);
-    // On phones, light up the group the right stick fires.
+    // On phones in swap mode, light up the group the right stick fires.
     for (let i = 0; i < this.groupTexts.length; i++) {
-      const active = !touch || actions.stickGroup === i + 1;
+      const active = !touch || settings.touchFire !== 'swap' || actions.stickGroup === i + 1;
       this.groupTexts[i].setAlpha(active ? 1 : 0.45);
     }
 
@@ -301,6 +316,13 @@ export class HudScene extends Phaser.Scene {
       }
     }
 
+    // Frame-rate readout (settings), refreshed twice a second.
+    this.fpsText.setVisible(settings.showFps && !this.debugText);
+    if (settings.showFps && (this.fpsTimer -= delta) <= 0) {
+      this.fpsTimer = 500;
+      this.setTextIfChanged(this.fpsText, 'fps', `${this.game.loop.actualFps.toFixed(0)} fps`);
+    }
+
     if (!this.debugText) return;
     this.worstFrame = Math.max(this.worstFrame, delta);
     this.debugTimer -= delta;
@@ -381,6 +403,7 @@ export class HudScene extends Phaser.Scene {
     this.briefing.setPosition(w / 2, Math.max(52, h * 0.16));
     this.warning.setPosition(w / 2, h * 0.3);
     this.debugText?.setPosition(w - MARGIN, 52);
+    this.fpsText.setPosition(w - MARGIN, 52);
 
     // Status panel: bottom centre (between the thumbs on phones).
     // Equipment line (PC keys) only when equipment with actions is fitted.

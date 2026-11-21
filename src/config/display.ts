@@ -16,6 +16,9 @@ export const DISPLAY = {
    */
   maxRenderPixels: 1920 * 1080,
 
+  /** Pixel cap on the 'low' quality setting (~720p), with the pixel ratio capped at 1. */
+  lowRenderPixels: 1280 * 720,
+
   /**
    * Never render below this fraction of CSS resolution, however big the screen.
    */

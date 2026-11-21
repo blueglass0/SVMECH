@@ -21,7 +21,7 @@ function init(): void {
   if (!AC) return;
   ctx = new AC();
   master = ctx.createGain();
-  master.gain.value = settings.muted ? 0 : 0.35;
+  master.gain.value = masterGain();
   master.connect(ctx.destination);
   noise = ctx.createBuffer(1, ctx.sampleRate * 0.6, ctx.sampleRate);
   const d = noise.getChannelData(0);
@@ -40,7 +40,18 @@ export function installAudioUnlock(): void {
 export function setMuted(muted: boolean): void {
   settings.muted = muted;
   saveSettings();
-  if (master) master.gain.value = muted ? 0 : 0.35;
+  if (master) master.gain.value = masterGain();
+}
+
+/** Volume 0..1 (settings). */
+export function setVolume(volume: number): void {
+  settings.volume = Math.max(0, Math.min(1, volume));
+  saveSettings();
+  if (master) master.gain.value = masterGain();
+}
+
+function masterGain(): number {
+  return settings.muted ? 0 : 0.45 * settings.volume;
 }
 
 /** Play a sound at a volume of 0..1 (callers scale by distance). */

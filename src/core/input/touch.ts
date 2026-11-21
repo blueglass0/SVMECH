@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { CONTROLS } from '../../config/controls';
 import { Viewport } from '../viewport';
+import { settings } from '../settings';
 import { actions, sticks, touchButtons, type StickView } from './actions';
 
 interface StickTrack {
@@ -36,14 +37,18 @@ export class TouchSource {
     const r = this.right.view;
     r.baseX = r.knobX = rx;
     r.baseY = r.knobY = ry;
-    touchButtons.swap.x = rx + CONTROLS.swapOffset.x;
-    touchButtons.swap.y = ry + CONTROLS.swapOffset.y;
-    touchButtons.equip1.x = rx + CONTROLS.equip1Offset.x;
-    touchButtons.equip1.y = ry + CONTROLS.equip1Offset.y;
-    touchButtons.equip2.x = rx + CONTROLS.equip2Offset.x;
-    touchButtons.equip2.y = ry + CONTROLS.equip2Offset.y;
-    touchButtons.interact.x = rx + CONTROLS.interactOffset.x;
-    touchButtons.interact.y = ry + CONTROLS.interactOffset.y;
+    // Buttons on an arc around the stick; the swap button only exists in 'swap' firing mode.
+    const swapMode = settings.touchFire === 'swap';
+    touchButtons.swap.visible = swapMode;
+    const order = swapMode ? [touchButtons.swap, touchButtons.equip1, touchButtons.equip2] : [touchButtons.equip1, touchButtons.equip2];
+    const arc = CONTROLS.buttonArc * Math.max(1, settings.buttonScale);
+    const place = (b: { x: number; y: number }, deg: number) => {
+      b.x = rx + Math.cos((deg * Math.PI) / 180) * arc;
+      b.y = ry + Math.sin((deg * Math.PI) / 180) * arc;
+    };
+    order.forEach((b, i) => place(b, CONTROLS.buttonSlots[i]));
+    place(touchButtons.interact, CONTROLS.interactSlot);
+    if (!swapMode) actions.stickGroup = 1;
     if (this.right.pointerId !== null) this.reset();
     if (this.left.pointerId === null) {
       const l = this.left.view;
@@ -76,11 +81,12 @@ export class TouchSource {
     const rc = rightCentre();
     const b = touchButtons.swap;
     // Buttons take priority where they overlap the right stick's grab area.
+    const k = settings.buttonScale;
     const eqIndex = [touchButtons.equip1, touchButtons.equip2].findIndex(
-      (eb, i) => eb.visible && this.equipPointers[i] === null && Math.hypot(x - eb.x, y - eb.y) <= CONTROLS.equipButtonRadius * 1.15,
+      (eb, i) => eb.visible && this.equipPointers[i] === null && Math.hypot(x - eb.x, y - eb.y) <= CONTROLS.equipButtonRadius * 1.15 * k,
     );
     const ib = touchButtons.interact;
-    if (ib.visible && this.interactPointer === null && Math.hypot(x - ib.x, y - ib.y) <= CONTROLS.equipButtonRadius * 1.2) {
+    if (ib.visible && this.interactPointer === null && Math.hypot(x - ib.x, y - ib.y) <= CONTROLS.equipButtonRadius * 1.2 * k) {
       this.interactPointer = p.id;
       ib.pressed = true;
       actions.interact = true;
@@ -89,7 +95,7 @@ export class TouchSource {
       (eqIndex === 0 ? touchButtons.equip1 : touchButtons.equip2).pressed = true;
       if (eqIndex === 0) actions.equip1 = true;
       else actions.equip2 = true;
-    } else if (this.swapPointer === null && Math.hypot(x - b.x, y - b.y) <= CONTROLS.buttonRadius * 1.15) {
+    } else if (b.visible && this.swapPointer === null && Math.hypot(x - b.x, y - b.y) <= CONTROLS.buttonRadius * 1.15 * k) {
       // Tap to switch which weapon group the right stick fires.
       this.swapPointer = p.id;
       b.pressed = true;
@@ -149,6 +155,8 @@ export class TouchSource {
     let dx = x - v.baseX;
     let dy = y - v.baseY;
     let d = Math.hypot(dx, dy);
+    // How far out the thumb really is (before the knob is clamped to the rim).
+    const reach = d / R;
     if (d > R) {
       if (floating) {
         v.baseX = x - (dx / d) * R;
@@ -177,15 +185,28 @@ export class TouchSource {
         actions.aim.x = nx;
         actions.aim.y = ny;
       }
-      this.setStickFire(out >= CONTROLS.fireThreshold);
+      this.setStickFire(out >= CONTROLS.fireThreshold, reach >= CONTROLS.bothGroupsAt);
     }
   }
 
-  /** The right stick fires whichever group is selected with the swap button. */
-  private setStickFire(on: boolean): void {
+  /**
+   * What the right stick fires (settings.touchFire): the selected group ('swap'), every weapon
+   * ('both'), or group 1 past the ring and both groups past the stick's edge ('tiers').
+   */
+  private setStickFire(on: boolean, farOut = false): void {
     this.stickFiring = on;
-    actions.fire1 = on && actions.stickGroup === 1;
-    actions.fire2 = on && actions.stickGroup === 2;
+    switch (settings.touchFire) {
+      case 'swap':
+        actions.fire1 = on && actions.stickGroup === 1;
+        actions.fire2 = on && actions.stickGroup === 2;
+        break;
+      case 'both':
+        actions.fire1 = actions.fire2 = on;
+        break;
+      default:
+        actions.fire1 = on;
+        actions.fire2 = on && farOut;
+    }
   }
 
   private release(s: StickTrack): void {

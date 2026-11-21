@@ -147,6 +147,7 @@ Milestones 1 to 5 are the prototype: a complete, playable loop with one mech, a 
    - Also (requested after M7): **different map sizes**, with some maps bigger, as long as performance holds.
    - Part 1 built: mech hunt (a named enemy ace roams between outposts, intel pings its position), convoy raid (stop most of a truck convoy crossing the map before it escapes), and large maps on about a third of contracts. Part 2 built: defend (hold three generators against attack waves from the map edges) and escort (stay with a friendly truck convoy past ambushes; the trucks only move while you're close). The enemy AI now goes after friendly units as well as the player.
 11. **Polish.** Difficulty settings menu, tutorial, sound pass, menu and phone UI pass, and a performance check on your phone. The phone UI pass should rethink the buttons around the right stick (weapon swap, two equipment actions, interact), which get crowded as features are added.
+   - Part 1 built: a Settings screen (difficulty for the current career, volume, graphics quality, screen shake, fps readout, controls), the new phone firing scheme with buttons on an arc around the stick and a size setting, and a low graphics mode for weak devices. Part 2: tutorial and sound pass.
 12. **Optional final mission.** Maybe, someday.
 
 ## Working rules for Claude Code
@@ -184,7 +185,7 @@ This is a new game project. Read docs/PLAN.md: it's the full design and build pl
 ## Open questions
 
 
-- [ ] **Phone weapon firing.** The tap-to-switch button works for now; find something easier to use before release.
+- [x] **Phone weapon firing.** Built in M11: push the right stick past its ring to fire group 1, past the outer edge to fire both groups. The swap button and an all-weapons mode remain as options in Settings.
 
 Decided so far: power is a build budget, tank controls on PC and direction-based movement on phone, an open-ended sandbox career, and the loan rule for losing your last mech. Still open:
 

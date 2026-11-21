@@ -484,6 +484,11 @@ function rollForces(tier: 1 | 2 | 3, enemy?: FactionId): { enemyMechs: string[];
   return { enemyMechs, droneFlights: Math.max(0, int(f.droneFlights) + (army?.extraDroneFlights ?? 0)) };
 }
 
+/** Change difficulty mid-career (Settings). Combat applies from the next deployment; economy right away. */
+export function setDifficulty(s: CareerState, combat: CombatLevel, economy: CombatLevel): void {
+  s.difficulty = { combat, economy };
+}
+
 // ---------- Factions and reputation ----------
 
 export function reputation(s: CareerState, f: FactionId): number {
